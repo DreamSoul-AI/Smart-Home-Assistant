@@ -1,0 +1,81 @@
+{
+    'did': '261743053', 
+    'token': '3263793849686c4158665338764b3364',
+    'longitude': '0.0', 
+    'latitude': '0.0',
+    'name': '石头',
+    'pid': '0', 
+    'localip': '192.168.50.26', 
+    'mac': '50:EC:50:19:26:A6', 
+    'ssid': 'FX', 
+    'bssid': '04:D4:C4:B8:94:58', 
+    'parent_id': '', 
+    'parent_model': '', 
+    'show_mode': 1, 
+    'model': 'roborock.vacuum.t6', 
+    'adminFlag': 1, 
+    'shareFlag': 0, 
+    'permitLevel': 16, 
+    'isOnline': True, 
+    'desc': 'Fully charged', 
+    'extra': {
+         'isSetPincode': 0, 
+         'pincodeType': 0, 
+         'fw_version': '3.5.4_1048', 
+         'needVerifyCode': 0, 
+         'isPasswordEncrypt': 0
+     }, 
+    'event': {}, 
+    'uid': 2259405996, 
+    'pd_id': 66064, 
+    'password': '', 
+    'p2p_id': '', 
+    'rssi': -56, 
+    'family_id': 0, 
+    'reset_flag': 0
+}
+
+
+
+
+
+
+
+
+did——device_id
+token——token
+longitude——经度（无效）
+latitude——纬度（无效）
+name——设备名（与app中命名一致）
+pid——连接方式（0-wifi，6-蓝牙，15-红外遥控扩展，未确定）
+localip——设备ip
+mac——设备mac
+ssid——网络SSID
+bssid——无线路由mac
+parent_id——父设备device id（如万能遥控分出的具体遥控，该id为万能遥控的device id）
+parent_model——父设备model
+show_mode——未知，均为1
+model——model，与https://home.miot-spec.com/中查询结果相对应
+adminFlag——未知，均为1
+shareFlag——未知，均为0
+permitLevel——未知，均为16
+isOnline——设备是否在线
+desc——设备描述，已知结果包括Device offline，Device online，Fully charged，空值，显示监测的温湿度值（温湿度计）
+extra——额外信息，包括固件版本等，子设备的extra信息少于一般设备
+event——日志
+uid——用户id（未确定），所有设备值均为2259405996
+pd_id——未知，均不一致
+password——密码，具体对象未知，均为空值
+p2p_id——未知，均为空值
+rssi——未知，均为负值，部分相同，大部分不同
+family_id——家庭id，家庭具体编号，（可能）用于区分同一米家账号上不同区域的智能设备，均为0
+reset_flag——未知，均为0
+
+
+
+
+
+
+
+
+
