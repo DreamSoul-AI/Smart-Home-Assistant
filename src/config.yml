@@ -1,8 +1,8 @@
 ---
 # control
 control:
-  data_name: MNIST
-  model_name: linear
+  data_name: SmartHome
+  model_name: sbert-lstm
 # experiment
 pin_memory: True
 num_workers: 0
