@@ -55,8 +55,8 @@ def make_dataset(data_name, verbose=True):
             transforms.ToTensor(),
             transforms.Normalize(*data_stats[data_name])])
     elif data_name in ['SmartHome']:
-        dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=['hh101'])
-        dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=['hh101'])
+        dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=['hh103'])
+        dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=['hh103'])
     else:
         raise ValueError('Not valid dataset name')
     if verbose:

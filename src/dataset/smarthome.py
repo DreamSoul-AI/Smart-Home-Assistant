@@ -8,7 +8,7 @@ from module import check_exists, makedir_exist_ok, save, load
 
 class SmartHome(Dataset):
     data_name = 'SmartHome'
-    supported_subsets = ['hh101']
+    supported_subsets = ['hh103']
 
     def __init__(self, root, split, subset):
         self.root = os.path.expanduser(root)
@@ -17,7 +17,7 @@ class SmartHome(Dataset):
         self.subset = subset
         if not check_exists(self.processed_folder):
             self.process()
-        self.data, self.target, self.meta = self.load_data()
+        self.data, self.meta = self.load_data()
         self.other = {}
 
     def __getitem__(self, index):
@@ -54,9 +54,9 @@ class SmartHome(Dataset):
     def load_data(self):
         data, target, meta = {}, {}, {}
         for subset in self.subset:
-            data[subset], target[subset] = load(os.path.join(self.processed_folder, subset, self.split))
+            data[subset] = load(os.path.join(self.processed_folder, subset, self.split))
             meta[subset] = load(os.path.join(self.processed_folder, subset, 'meta'))
-        return data, target, meta
+        return data, meta
 
     def __repr__(self):
         fmt_str = 'Dataset {}\nSize: {}\nRoot: {}\nSplit: {}'.format(self.__class__.__name__, self.__len__(),
@@ -64,17 +64,14 @@ class SmartHome(Dataset):
         return fmt_str
 
     def make_data(self, subset):
-        data = pd.read_csv(os.path.join(self.raw_folder, subset, 'data.csv'), header=None, delimiter=',')
-        env = pd.read_csv(os.path.join(self.raw_folder, subset, 'env.csv'), header=None, delimiter=',')
-        print(data)
-        print(env)
-        exit()
-        train_data = read_image_file(os.path.join(self.raw_folder, 'train-images-idx3-ubyte'))
-        test_data = read_image_file(os.path.join(self.raw_folder, 't10k-images-idx3-ubyte'))
-        train_target = read_label_file(os.path.join(self.raw_folder, 'train-labels-idx1-ubyte'))
-        test_target = read_label_file(os.path.join(self.raw_folder, 't10k-labels-idx1-ubyte'))
-        train_id, test_id = np.arange(len(train_data)).astype(np.int64), np.arange(len(test_data)).astype(np.int64)
-        classes = list(map(str, list(range(10))))
-        classes_to_labels = {classes[i]: i for i in range(len(classes))}
-        target_size = len(classes)
-        return (train_id, train_data, train_target), (test_id, test_data, test_target), (classes_to_labels, target_size)
+        data = pd.read_csv(os.path.join(self.raw_folder, subset, 'data.csv'), delimiter=',')
+        env = pd.read_csv(os.path.join(self.raw_folder, subset, 'env.csv'), delimiter=',')
+        data = data[['e_datetime', 'did', 'type', 'func', 'd_value']]
+        data.rename(columns={'e_datetime': 'ts', 'did': 'd_name', 'type': 'd_type', 'func': 'd_func'}, inplace=True)
+        split_ratio = 0.8
+        split_index = int(0.8 * len(data))
+        train_data = data[:split_index]
+        test_data = data[split_index:]
+        # print(train_data['d_type'].value_counts())
+        # print(test_data['d_type'].value_counts())
+        return train_data, test_data, env
