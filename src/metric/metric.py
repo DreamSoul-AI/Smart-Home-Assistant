@@ -9,10 +9,14 @@ def make_metric(metric_name):
         pivot = -float('inf')
         pivot_direction = 'up'
         pivot_name = 'Accuracy'
-    elif cfg['data_name'] in ['FPB']:
+        for k in metric_name:
+            metric_name[k].extend(['Accuracy'])
+    if cfg['data_name'] in ['SmartHome']:
         pivot = -float('inf')
         pivot_direction = 'up'
         pivot_name = 'Accuracy'
+        for k in metric_name:
+            metric_name[k].extend(['Accuracy'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, pivot, pivot_direction, pivot_name)

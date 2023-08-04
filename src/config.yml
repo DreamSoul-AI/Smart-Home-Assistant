@@ -2,7 +2,7 @@
 # control
 control:
   data_name: SmartHome
-  model_name: sbert-lstm
+  model_name: lstm
 # experiment
 pin_memory: True
 num_workers: 0
