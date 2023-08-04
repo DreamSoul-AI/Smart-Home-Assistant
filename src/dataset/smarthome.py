@@ -1,71 +1,49 @@
+import bisect
 import numpy as np
 import os
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-from module import check_exists, makedir_exist_ok, save, load
+from module import check_exists, save, load
 
 
 class SmartHome(Dataset):
     data_name = 'SmartHome'
-    supported_subsets = ['hh103']
 
-    def __init__(self, root, split, subset):
+    def __init__(self, root, split, subset, seq_len=300, hop_len=300, pred_len=(300,)):
         self.root = os.path.expanduser(root)
         self.split = split
         self.transform = None
         self.subset = subset
-        if not check_exists(self.processed_folder):
-            self.process()
-        self.data, self.meta = self.load_data()
+        self.seq_len = seq_len
+        self.hop_len = hop_len
+        self.pred_len = pred_len
+        self.process()
+        self.configure()
         self.other = {}
-        self.length = []
-        length = 0
-        for k in self.subset:
-            length += len(self.data[k])
-            self.length.append(length)
-        self.pred_len = None
-        self.hop_len = None
-        self.seq_len = None
 
-    def configure(self, seq_len=None, hop_len=None, pred_len=None):
+    def configure(self, subset=None, seq_len=None, hop_len=None, pred_len=None):
+        if subset:
+            self.subset = subset
         if seq_len:
-            self.seq_len = pd.Timedelta(seconds=seq_len)
+            self.seq_len = seq_len
         if hop_len:
-            self.hop_len = pd.Timedelta(seconds=hop_len)
+            self.hop_len = hop_len
         if pred_len:
-            self.pred_len = []
-            for i in range(len(pred_len)):
-                self.pred_len.append(pd.Timedelta(seconds=pred_len[i]))
-        self.start_times = {}
-        for k in self.subset:
-            self.start_times[k] = pd.date_range(start=self.data[k].iloc[0]['ts'],
-                                                end=self.data[k].iloc[-1]['ts'] - self.seq_len, freq=self.hop_len)
+            self.pred_len = pred_len
+        self.configuration = '{}-{}-{}-{}'.format(self.subset, self.seq_len, self.hop_len, '-'.join(self.pred_len))
+        self.data, self.meta = self.load_data()
         return
 
     def __getitem__(self, index):
-        subset_index = np.searchsorted(self.length, index, side='right') - 1
+        subset_index = bisect.bisect_left(self.length, index + 1)
+        index_ = index if subset_index == 0 else index - self.length[subset_index - 1]
         subset = self.subset[subset_index]
-        t_start = self.start_times[subset][index]
-        t_end = t_start + self.seq_len
-        data = self.data[subset][(self.data[subset]['ts'] >= t_start) & (self.data[subset]['ts'] < t_end)]
-        target = []
-        detect = []
-        for i in range(len(self.pred_len)):
-            t_pred_end_i = t_start + self.pred_len[i]
-            target_i = self.data[subset][(self.data[subset]['ts'] >= t_start) &
-                                         (self.data[subset]['ts'] < t_pred_end_i) &
-                                         (self.data[subset]['d_type'] == 'controller')]
-            detect_i = 1 if not target_i.empty else 0
-            target.append(target_i)
-            detect.append(detect_i)
-        input = {'data': data, 'target': target, 'detect': detect}
+        input = self.data[subset][index_]
         return input
 
     def __len__(self):
-        length = 0
-        for k in self.subset:
-            length += len(self.start_times[k])
+        length = self.length[-1]
         return length
 
     @property
@@ -79,21 +57,25 @@ class SmartHome(Dataset):
     def process(self):
         if not check_exists(self.raw_folder):
             self.download()
-        for subset in self.supported_subsets:
-            train_set, test_set, meta = self.make_data(subset)
-            save(train_set, os.path.join(self.processed_folder, subset, 'train'))
-            save(test_set, os.path.join(self.processed_folder, subset, 'test'))
-            save(meta, os.path.join(self.processed_folder, subset, 'meta'))
+        for subset in self.subset:
+            data_path = os.path.join(self.processed_folder, self.configuration)
+            if not check_exists(data_path):
+                train_set, test_set = self.make_data(subset)
+                save(train_set, os.path.join(data_path, 'train'))
+                save(test_set, os.path.join(data_path, 'train'))
         return
 
     def download(self):
         raise NotImplementedError
 
     def load_data(self):
-        data, target, meta = {}, {}, {}
+        data, meta = {}, {}
+        self.length = []
+        length = 0
         for subset in self.subset:
-            data[subset] = load(os.path.join(self.processed_folder, subset, self.split))
-            meta[subset] = load(os.path.join(self.processed_folder, subset, 'meta'))
+            data[subset], meta[subset] = load(os.path.join(self.processed_folder, subset, self.split))
+            length += len(data[subset]['data'])
+            self.length.append(length)
         return data, meta
 
     def __repr__(self):
@@ -111,5 +93,37 @@ class SmartHome(Dataset):
         split_index = int(split_ratio * len(data))
         train_data = data[:split_index]
         test_data = data[split_index:]
-        meta = env
-        return train_data, test_data, meta
+        train_data, train_start_times = self.batchify(train_data)
+        test_data, test_start_times = self.batchify(test_data)
+        train_meta = (train_start_times, env)
+        test_meta = (train_start_times, env)
+        return (train_data, train_meta), (test_data, test_meta)
+
+    def batchify(self, dataset):
+        from tqdm import tqdm
+        seq_len = pd.Timedelta(seconds=self.seq_len)
+        hop_len = pd.Timedelta(seconds=self.hop_len)
+        pred_len = []
+        for i in range(len(self.pred_len)):
+            pred_len.append(pd.Timedelta(seconds=self.pred_len[i]))
+        start_times = pd.date_range(start=dataset.iloc[0]['ts'],
+                                    end=dataset.iloc[-1]['ts'] - seq_len, freq=hop_len)
+        data = {'data': [], 'target': [], 'detect': []}
+        for i in tqdm(range(len(start_times))):
+            t_start = start_times[i]
+            t_end = t_start + seq_len
+            data_i = dataset[(dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]
+            controller_data_i = dataset[(dataset['ts'] >= t_start) & (dataset['d_type'] == 'controller')]
+            target_i = []
+            detect_i = []
+            for j in range(len(pred_len)):
+                pred_len_j = pred_len[j]
+                t_pred_end_j = t_start + pred_len_j
+                target_i_j = controller_data_i[controller_data_i['ts'] < t_pred_end_j]
+                detect_i_j = 1 if not target_i_j.empty else 0
+                target_i.append(target_i_j)
+                detect_i.append(detect_i_j)
+            data['data'].append(data_i)
+            data['target'].append(target_i)
+            data['detect'].append(detect_i)
+        return data, start_times

@@ -2,6 +2,7 @@ import dataset
 import numpy as np
 import os
 import torch
+from datasets import Dataset
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
@@ -79,7 +80,6 @@ def make_data_collate(collate_mode):
 
 def make_data_loader(dataset, tag, batch_size=None, shuffle=None, sampler=None):
     data_loader = {}
-    cfg['num_steps'] = {}
     for k in dataset:
         _batch_size = cfg[tag]['batch_size'][k] if batch_size is None else batch_size[k]
         _shuffle = cfg[tag]['shuffle'][k] if shuffle is None else shuffle[k]
@@ -93,7 +93,6 @@ def make_data_loader(dataset, tag, batch_size=None, shuffle=None, sampler=None):
                                         pin_memory=cfg['pin_memory'], num_workers=cfg['num_workers'],
                                         collate_fn=make_data_collate(cfg['collate_mode']),
                                         worker_init_fn=np.random.seed(cfg['seed']))
-        cfg['num_steps'][k] = len(data_loader[k])
     return data_loader
 
 
@@ -104,9 +103,21 @@ def collate(input):
 
 
 def process_dataset(dataset):
-    processed_dataset = dataset
-    for k in processed_dataset:
-        processed_dataset[k].configure(300, 60, [10, 60, 300])
+    batch_size = 1000
+    processed_dataset = {}
+    for k in dataset:
+        dataset[k].configure(300, 300, [10, 60, 300])
+        dataloader = DataLoader(dataset[k], batch_size=batch_size, shuffle=False, num_workers=4,
+                                collate_fn=input_collate)
+        data = {p: [] for p in dataset[k][0]}
+        for batch in tqdm(dataloader):
+            for p in data.keys():
+                data[p].append(batch[p])
+        exit()
+        processed_dataset[k] = Dataset.from_dict(data)
+    print(processed_dataset)
+    exit()
+
     cfg['data_size'] = {k: len(processed_dataset[k]) for k in processed_dataset}
     # cfg['target_size'] = processed_dataset['train'].target_size
     return processed_dataset
