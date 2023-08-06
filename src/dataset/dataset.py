@@ -106,11 +106,14 @@ def process_dataset(dataset):
     batch_size = 1000
     processed_dataset = {}
     for k in dataset:
-        dataset[k].configure(300, 300, [10, 60, 300])
+        dataset[k].configure(['hh103'], 300, 300, (300,))
         dataloader = DataLoader(dataset[k], batch_size=batch_size, shuffle=False, num_workers=4,
                                 collate_fn=input_collate)
+        print(dataset['train'])
+        print(dataset['test'])
+        exit()
         data = {p: [] for p in dataset[k][0]}
-        for batch in tqdm(dataloader):
+        for batch in dataloader:
             for p in data.keys():
                 data[p].append(batch[p])
         exit()
