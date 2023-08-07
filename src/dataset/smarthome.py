@@ -64,11 +64,11 @@ class SmartHome(Dataset):
             self.download()
         for subset in self.subset:
             data_path = os.path.join(self.processed_folder, subset, self.configuration)
-            # if not check_exists(data_path):
-            #     makedir_exist_ok(data_path)
-            train_set, test_set = self.make_data(subset)
-            save(train_set, os.path.join(data_path, 'train'))
-            save(test_set, os.path.join(data_path, 'test'))
+            if not check_exists(data_path):
+                makedir_exist_ok(data_path)
+                train_set, test_set = self.make_data(subset)
+                save(train_set, os.path.join(data_path, 'train'))
+                save(test_set, os.path.join(data_path, 'test'))
         self.data, self.meta = self.load_data()
         return
 
@@ -155,9 +155,9 @@ class SmartHome(Dataset):
             detect_i = []
             for j in range(len(pred_len)):
                 pred_len_j = pred_len[j]
-                t_pred_end_j = t_start + pred_len_j
+                t_pred_end_j = t_end + pred_len_j
                 target_i_j = controller_data[
-                    (controller_data['ts'] < t_pred_end_j) & (controller_data['ts'] >= t_start)]
+                    (controller_data['ts'] < t_pred_end_j) & (controller_data['ts'] >= t_end)]
                 detect_i_j = 1 if not target_i_j.empty else 0
                 target_i.append(target_i_j)
                 detect_i.append(detect_i_j)

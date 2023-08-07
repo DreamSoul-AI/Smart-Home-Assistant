@@ -103,38 +103,88 @@ def collate(input):
     return input
 
 
-def process_dataset(dataset):
+def process_dataset(dataset, tokenizer):
+    max_length = 12
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+    def preprocess_function_token(examples):
+        data = examples['data']
+        ts = data['ts']
+        d_name, d_func, d_type = data['d_name'], data['d_func'], data['d_type']
+        d_value = data['d_value']
+        time = []
+        device = []
+        value = []
+        for i in range(len(d_name)):
+            month_i, day_i, hour_i, minute_i, second_i = (ts[i].month, ts[i].day, ts[i].hour,
+                                                          ts[i].minute, ts[i].second)
+
+            time_i = 'Month: {}, Day: {}, Hour: {}, Minute: {}, Second: {}'.format(month_i, day_i,
+                                                                                   hour_i, minute_i, second_i)
+            device_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[i], d_func[i], d_type[i])
+            value_i = str(d_value[i])
+            time.append(time_i)
+            device.append(device_i)
+            value.append(value_i)
+        token_time = tokenizer(time, truncation=True, padding='max_length', max_length=32)
+        token_device = tokenizer(device, truncation=True, padding='max_length', max_length=16)
+        token_value = tokenizer(value, truncation=True, padding='max_length', max_length=8)
+        model_inputs = {}
+        model_inputs['input_ids'] = torch.cat(
+            [torch.tensor(token_time['input_ids']), torch.tensor(token_device['input_ids']),
+             torch.tensor(token_value['input_ids'])], dim=-1).t()
+        model_inputs['attention_mask'] = torch.cat(
+            [torch.tensor(token_time['attention_mask']), torch.tensor(token_device['attention_mask']),
+             torch.tensor(token_value['attention_mask'])], dim=-1).t()
+        model_inputs = tokenizer.pad(model_inputs, max_length=max_length, padding='max_length', return_tensors="pt")
+        model_inputs['input_ids'] = model_inputs['input_ids'][:, -max_length:]
+        model_inputs['attention_mask'] = model_inputs['attention_mask'][:, -max_length:]
+        print(model_inputs['attention_mask'])
+        exit()
+        print(model_inputs['input_ids'].size())
+        exit()
+
+        return model_inputs
+
+
     processed_dataset = {}
     for split in dataset:
-        dataset[split].configure(['hh103'], 300, 300, (300,))
+        dataset[split].configure(['hh103'], 1200, 300, 2, (300,))
         data = defaultdict(list)
         for subset in dataset[split].subset:
             for k in dataset[split].data[subset]:
-                print(k)
-                print(dataset[split].data[subset][k])
-                exit()
                 data[k].extend(dataset[split].data[subset][k])
         processed_dataset[split] = Dataset.from_dict(data)
-        def preprocess_function(examples):
-            print(examples)
-            exit()
-            inputs = examples[text_column]
-            targets = examples[label_column]
-            model_inputs = tokenizer(inputs, max_length=max_length, padding="max_length", truncation=True,
-                                     return_tensors="pt")
-            labels = tokenizer(targets, max_length=3, padding="max_length", truncation=True, return_tensors="pt")
-            labels = labels["input_ids"]
-            labels[labels == tokenizer.pad_token_id] = -100
-            model_inputs["labels"] = labels
-            return model_inputs
+
+
+
+        # def preprocess_function_pad(examples):
+        #     print(examples['input_ids'][0].size(), )
+        #     # targets = examples[label_column]
+        #     # model_inputs = tokenizer(inputs, max_length=max_length, padding="max_length", truncation=True,
+        #     #                          return_tensors="pt")
+        #     # labels = tokenizer(targets, max_length=3, padding="max_length", truncation=True, return_tensors="pt")
+        #     # labels = labels["input_ids"]
+        #     # labels[labels == tokenizer.pad_token_id] = -100
+        #     # model_inputs["labels"] = labels
+        #     return examples
 
         processed_dataset[split] = processed_dataset[split].map(
-            preprocess_function,
+            preprocess_function_token,
             batched=False,
             num_proc=1,
+            remove_columns=['data', 'target', 'detect'],
             load_from_cache_file=False,
             desc="Preprocess dataset",
         )
+
+        # processed_dataset[split] = processed_dataset[split].map(
+        #     preprocess_function_pad,
+        #     batched=False,
+        #     num_proc=1,
+        #     load_from_cache_file=False,
+        #     desc="Preprocess dataset",
+        # )
     print(processed_dataset)
     exit()
 

@@ -5,6 +5,7 @@ import shutil
 import time
 import torch
 import torch.backends.cudnn as cudnn
+from transformers import GPT2Tokenizer
 from config import cfg, process_args
 from dataset import make_dataset, make_data_loader, process_dataset, collate
 from metric import make_metric, make_logger
@@ -40,7 +41,8 @@ def runExperiment():
     checkpoint_path = os.path.join(model_tag_path, 'checkpoint')
     best_path = os.path.join(model_tag_path, 'best')
     dataset = make_dataset(cfg['data_name'])
-    dataset = process_dataset(dataset)
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2", padding_side='left')
+    dataset = process_dataset(dataset, tokenizer)
     model = make_model(cfg['model_name'])
     data_loader = make_data_loader(dataset, cfg['model_name'])
     metric = make_metric({'train': ['Loss'], 'test': ['Loss']})
