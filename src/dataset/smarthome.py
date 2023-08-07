@@ -12,7 +12,7 @@ from module import check_exists, makedir_exist_ok, save, load
 class SmartHome(Dataset):
     data_name = 'SmartHome'
 
-    def __init__(self, root, split, subset, seq_len=300, hop_len=300, pred_len=(300,)):
+    def __init__(self, root, split, subset, seq_len=1200, hop_len=300, pred_len=(300,), min_len=2):
         self.root = os.path.expanduser(root)
         self.split = split
         self.transform = None
@@ -20,19 +20,23 @@ class SmartHome(Dataset):
         self.seq_len = seq_len
         self.hop_len = hop_len
         self.pred_len = pred_len
+        self.min_len = min_len
         self.process()
         self.other = {}
 
-    def configure(self, subset=None, seq_len=None, hop_len=None, pred_len=None):
+    def configure(self, subset=None, seq_len=None, hop_len=None, min_len=None, pred_len=None):
         if subset:
             self.subset = subset
         if seq_len:
             self.seq_len = seq_len
         if hop_len:
             self.hop_len = hop_len
+        if min_len:
+            self.min_len = min_len
         if pred_len:
             self.pred_len = pred_len
-        self.configuration = '{}_{}_{}'.format(self.seq_len, self.hop_len, '-'.join(map(str, self.pred_len)))
+        self.configuration = '{}_{}_{}_{}'.format(self.seq_len, self.hop_len, self.min_len,
+                                                  '-'.join(map(str, self.pred_len)))
         return
 
     def __getitem__(self, index):
@@ -60,11 +64,11 @@ class SmartHome(Dataset):
             self.download()
         for subset in self.subset:
             data_path = os.path.join(self.processed_folder, subset, self.configuration)
-            if not check_exists(data_path):
-                makedir_exist_ok(data_path)
-                train_set, test_set = self.make_data(subset)
-                save(train_set, os.path.join(data_path, 'train'))
-                save(test_set, os.path.join(data_path, 'test'))
+            # if not check_exists(data_path):
+            #     makedir_exist_ok(data_path)
+            train_set, test_set = self.make_data(subset)
+            save(train_set, os.path.join(data_path, 'train'))
+            save(test_set, os.path.join(data_path, 'test'))
         self.data, self.meta = self.load_data()
         return
 
@@ -140,11 +144,13 @@ class SmartHome(Dataset):
     #     return data, start_times
 
     def process_chunk(self, chunk_args):
-        chunk, seq_len, pred_len, controller_data, dataset = chunk_args
+        chunk, seq_len, min_len, pred_len, controller_data, dataset = chunk_args
         data = {'data': [], 'target': [], 'detect': []}
         for t_start in tqdm(chunk, desc="Processing chunk", leave=False):
             t_end = t_start + seq_len
             data_i = dataset[(dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]
+            if len(data_i) < min_len:
+                break
             target_i = []
             detect_i = []
             for j in range(len(pred_len)):
@@ -163,6 +169,7 @@ class SmartHome(Dataset):
     def batchify(self, dataset):
         seq_len = pd.Timedelta(seconds=self.seq_len)
         hop_len = pd.Timedelta(seconds=self.hop_len)
+        min_len = self.min_len
         pred_len = [pd.Timedelta(seconds=p) for p in self.pred_len]
         start_times = pd.date_range(start=dataset.iloc[0]['ts'], end=dataset.iloc[-1]['ts'] - seq_len, freq=hop_len)
         controller_data = dataset[dataset['d_type'] == 'controller']
@@ -170,7 +177,7 @@ class SmartHome(Dataset):
         # Split start_times into chunks
         n_chunks = 4  # Number of chunks, can be adjusted
         chunks = np.array_split(start_times, n_chunks)
-        args = [(chunk, seq_len, pred_len, controller_data, dataset) for chunk in chunks]
+        args = [(chunk, seq_len, min_len, pred_len, controller_data, dataset) for chunk in chunks]
 
         with Pool() as pool:
             results = list(tqdm(pool.imap(self.process_chunk, args), total=len(chunks)))
@@ -182,4 +189,22 @@ class SmartHome(Dataset):
             data['target'].extend(result['target'])
             data['detect'].extend(result['detect'])
 
+        # import matplotlib.pyplot as plt
+        #
+        # # Assuming data['data'] is a list of lists, and you want to plot the lengths of the inner lists
+        # from collections import Counter
+        #
+        # # Assuming data['data'] is a list of lists, and you want to print the counts of unique lengths of the inner lists
+        # lengths = [len(element) for element in data['data']]
+        # unique_length_counts = Counter(lengths)
+        #
+        # print("Unique Lengths and Their Counts:")
+        # for length, count in unique_length_counts.items():
+        #     print(f"Length: {length}, Count: {count}")
+        #
+        # plt.hist(lengths, bins='auto')  # You can specify the number of bins or leave it as 'auto'
+        # plt.title('Histogram of Lengths')
+        # plt.xlabel('Length')
+        # plt.ylabel('Frequency')
+        # plt.show()
         return data, start_times
