@@ -111,7 +111,7 @@ class SmartHome(Dataset):
         train_data, train_start_times = self.batchify(train_data)
         test_data, test_start_times = self.batchify(test_data)
         train_meta = (train_start_times, env)
-        test_meta = (train_start_times, env)
+        test_meta = (test_start_times, env)
         return (train_data, train_meta), (test_data, test_meta)
 
     # def batchify(self, dataset):
@@ -191,13 +191,12 @@ class SmartHome(Dataset):
 
         # import matplotlib.pyplot as plt
         #
-        # # Assuming data['data'] is a list of lists, and you want to plot the lengths of the inner lists
+        # Assuming data['data'] is a list of lists, and you want to plot the lengths of the inner lists
         # from collections import Counter
         #
         # # Assuming data['data'] is a list of lists, and you want to print the counts of unique lengths of the inner lists
         # lengths = [len(element) for element in data['data']]
         # unique_length_counts = Counter(lengths)
-        #
         # print("Unique Lengths and Their Counts:")
         # for length, count in unique_length_counts.items():
         #     print(f"Length: {length}, Count: {count}")

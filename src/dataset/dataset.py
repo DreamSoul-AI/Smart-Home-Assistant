@@ -104,48 +104,75 @@ def collate(input):
 
 
 def process_dataset(dataset, tokenizer):
-    max_length = 12
+    max_length = 512
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
+
     def preprocess_function_token(examples):
-        data = examples['data']
-        ts = data['ts']
-        d_name, d_func, d_type = data['d_name'], data['d_func'], data['d_type']
-        d_value = data['d_value']
-        time = []
-        device = []
-        value = []
-        for i in range(len(d_name)):
-            month_i, day_i, hour_i, minute_i, second_i = (ts[i].month, ts[i].day, ts[i].hour,
-                                                          ts[i].minute, ts[i].second)
+        max_length_time = 32
+        max_length_device = 16
+        max_length_value = 8
+        feature_size = max_length_time + max_length_device + max_length_value
+        batch_size = len(examples['data'])
+        model_inputs = {'input_ids': [], 'attention_mask': [], 'labels': []}
+        for i in range(batch_size):
+            data = examples['data'][i]
+            ts = data['ts']
+            d_name, d_func, d_type = data['d_name'], data['d_func'], data['d_type']
+            d_value = data['d_value']
+            time = []
+            device = []
+            value = []
+            for j in range(len(d_name)):
+                month_j, day_j, hour_j, minute_j, second_j = (ts[j].month, ts[j].day, ts[j].hour,
+                                                              ts[j].minute, ts[j].second)
 
-            time_i = 'Month: {}, Day: {}, Hour: {}, Minute: {}, Second: {}'.format(month_i, day_i,
-                                                                                   hour_i, minute_i, second_i)
-            device_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[i], d_func[i], d_type[i])
-            value_i = str(d_value[i])
-            time.append(time_i)
-            device.append(device_i)
-            value.append(value_i)
-        token_time = tokenizer(time, truncation=True, padding='max_length', max_length=32)
-        token_device = tokenizer(device, truncation=True, padding='max_length', max_length=16)
-        token_value = tokenizer(value, truncation=True, padding='max_length', max_length=8)
-        model_inputs = {}
-        model_inputs['input_ids'] = torch.cat(
-            [torch.tensor(token_time['input_ids']), torch.tensor(token_device['input_ids']),
-             torch.tensor(token_value['input_ids'])], dim=-1).t()
-        model_inputs['attention_mask'] = torch.cat(
-            [torch.tensor(token_time['attention_mask']), torch.tensor(token_device['attention_mask']),
-             torch.tensor(token_value['attention_mask'])], dim=-1).t()
-        model_inputs = tokenizer.pad(model_inputs, max_length=max_length, padding='max_length', return_tensors="pt")
-        model_inputs['input_ids'] = model_inputs['input_ids'][:, -max_length:]
-        model_inputs['attention_mask'] = model_inputs['attention_mask'][:, -max_length:]
-        print(model_inputs['attention_mask'])
-        exit()
-        print(model_inputs['input_ids'].size())
-        exit()
-
+                time_j = 'Month: {}, Day: {}, Hour: {}, Minute: {}, Second: {}'.format(month_j, day_j,
+                                                                                       hour_j, minute_j, second_j)
+                device_j = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
+                value_i = str(d_value[j])
+                time.append(time_j)
+                device.append(device_j)
+                value.append(value_i)
+            token_time = tokenizer(time, truncation=True, padding='max_length', max_length=max_length_time)
+            token_device = tokenizer(device, truncation=True, padding='max_length', max_length=max_length_device)
+            token_value = tokenizer(value, truncation=True, padding='max_length', max_length=max_length_value)
+            input_ids_i = torch.cat(
+                [torch.tensor(token_time['input_ids']), torch.tensor(token_device['input_ids']),
+                 torch.tensor(token_value['input_ids'])], dim=-1)
+            attention_mask_i = torch.cat(
+                [torch.tensor(token_time['attention_mask']), torch.tensor(token_device['attention_mask']),
+                 torch.tensor(token_value['attention_mask'])], dim=-1)
+            model_inputs['input_ids'].append(input_ids_i[:-1])
+            model_inputs['attention_mask'].append(attention_mask_i)
+            model_inputs['labels'].append(input_ids_i[[-1]])
+            sample_input_ids = model_inputs["input_ids"][i]
+            label_input_ids = torch.cat([model_inputs["labels"][i],
+                                         torch.tensor(tokenizer.pad_token_id).repeat(feature_size).unsqueeze(0)], dim=0)
+            model_inputs['input_ids'][i] = torch.cat([sample_input_ids, label_input_ids], dim=0)
+            mask_out = torch.tensor([-100]).expand_as(sample_input_ids)
+            model_inputs['labels'][i] = torch.cat([mask_out, label_input_ids], dim=0)
+            model_inputs["attention_mask"][i] = torch.cat([model_inputs['attention_mask'][i],
+                                                           torch.ones(1, feature_size)], dim=0)
+            # if len(model_inputs['input_ids']) > max_length:
+            #     print(len(model_inputs['input_ids']))
+            model_inputs['input_ids'][i] = model_inputs['input_ids'][i][-max_length:]
+            model_inputs['attention_mask'][i] = model_inputs['attention_mask'][i][-max_length:]
+            model_inputs['labels'][i] = model_inputs['labels'][i][-max_length:]
+        for i in range(batch_size):
+            sample_input_ids = model_inputs["input_ids"][i]
+            if len(sample_input_ids) < max_length:
+                pad_token = torch.tensor([tokenizer.pad_token_id]).expand(max_length -
+                                                                          len(sample_input_ids), feature_size)
+                model_inputs["input_ids"][i] = torch.cat([pad_token, model_inputs["input_ids"][i]], dim=0)
+                pad_token = torch.tensor([0]).expand(max_length - len(sample_input_ids), feature_size)
+                model_inputs["attention_mask"][i] = torch.cat([pad_token, model_inputs["attention_mask"][i]], dim=0)
+                pad_token = torch.tensor([-100]).expand(max_length - len(sample_input_ids), feature_size)
+                model_inputs["labels"][i] = torch.cat([pad_token, model_inputs["labels"][i]], dim=0)
+            model_inputs["input_ids"][i] = model_inputs["input_ids"][i].t()
+            model_inputs["attention_mask"][i] = model_inputs["attention_mask"][i].t()
+            model_inputs["labels"][i] = model_inputs["labels"][i].t()
         return model_inputs
-
 
     processed_dataset = {}
     for split in dataset:
@@ -156,35 +183,15 @@ def process_dataset(dataset, tokenizer):
                 data[k].extend(dataset[split].data[subset][k])
         processed_dataset[split] = Dataset.from_dict(data)
 
-
-
-        # def preprocess_function_pad(examples):
-        #     print(examples['input_ids'][0].size(), )
-        #     # targets = examples[label_column]
-        #     # model_inputs = tokenizer(inputs, max_length=max_length, padding="max_length", truncation=True,
-        #     #                          return_tensors="pt")
-        #     # labels = tokenizer(targets, max_length=3, padding="max_length", truncation=True, return_tensors="pt")
-        #     # labels = labels["input_ids"]
-        #     # labels[labels == tokenizer.pad_token_id] = -100
-        #     # model_inputs["labels"] = labels
-        #     return examples
-
         processed_dataset[split] = processed_dataset[split].map(
             preprocess_function_token,
-            batched=False,
+            batched=True,
             num_proc=1,
             remove_columns=['data', 'target', 'detect'],
             load_from_cache_file=False,
             desc="Preprocess dataset",
         )
 
-        # processed_dataset[split] = processed_dataset[split].map(
-        #     preprocess_function_pad,
-        #     batched=False,
-        #     num_proc=1,
-        #     load_from_cache_file=False,
-        #     desc="Preprocess dataset",
-        # )
     print(processed_dataset)
     exit()
 
