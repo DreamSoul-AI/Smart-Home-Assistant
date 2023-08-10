@@ -192,7 +192,13 @@ def process_dataset(dataset, tokenizer):
             desc="Preprocess dataset",
         )
 
+
     print(processed_dataset)
+    print(torch.tensor(processed_dataset['train']['input_ids']).size())
+    data_0 = torch.tensor(processed_dataset['train']['input_ids'][0])
+    print(data_0.size())
+    text = tokenizer.batch_decode(data_0.t())
+    print(text[-5])
     exit()
 
     cfg['data_size'] = {k: len(processed_dataset[k]) for k in processed_dataset}
