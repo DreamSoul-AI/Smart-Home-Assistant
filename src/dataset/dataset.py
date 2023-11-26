@@ -2,12 +2,15 @@ import dataset
 import numpy as np
 import os
 import torch
+import datetime
 from collections import defaultdict
 from datasets import Dataset
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 from config import cfg
+
+from tqdm.auto import tqdm
 
 data_stats = {'MNIST': ((0.1307,), (0.3081,)), 'FashionMNIST': ((0.2860,), (0.3530,)),
               'CIFAR10': ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
@@ -19,7 +22,7 @@ def make_dataset(data_name, verbose=True):
     dataset_ = {}
     if verbose:
         print('fetching data {}...'.format(data_name))
-    root = os.path.join('data', data_name)
+    root = os.path.join('data', data_name)  # 数据路径root: data\SmartHome
     if data_name in ['MNIST', 'FashionMNIST']:
         dataset_['train'] = eval('dataset.{}(root=root, split="train", '
                                  'transform=dataset.Compose([transforms.ToTensor()]))'.format(data_name))
@@ -103,104 +106,88 @@ def collate(input):
     return input
 
 
-def process_dataset(dataset, tokenizer):
-    max_length = 512
-    if tokenizer.pad_token_id is None:
-        tokenizer.pad_token_id = tokenizer.eos_token_id
+# sentence bert。。。。 average across 变成一维矢量
+def process_dataset(dataset):
+
+    def arr_split(arr, split_name, split_size):
+        splits = np.split(arr, np.arange(split_size, arr.shape[0], split_size))
+        if splits[-1].shape[0] != split_size:
+            # print(f'last element has been dropped, which shade is {splits[-1].shape}')
+            splits.pop()
+        for i, split in enumerate(splits):
+            np.save(f'{split_name}_{i}.npy', split)
+        return splits
 
     def preprocess_function_token(examples):
-        max_length_time = 32
-        max_length_device = 16
-        max_length_value = 8
-        feature_size = max_length_time + max_length_device + max_length_value
+        from sentence_transformers import SentenceTransformer
+        sbert_model = SentenceTransformer('sbert')
         batch_size = len(examples['data'])
-        model_inputs = {'input_ids': [], 'attention_mask': [], 'labels': []}
-        for i in range(batch_size):
-            data = examples['data'][i]
-            ts = data['ts']
+        print('-------------batch size:{}'.format(batch_size))
+        pad_len = 1000
+
+        stacked_data = np.empty((0, pad_len, 770))  #var
+        for j in range(batch_size):
+            print('({}/{})'.format(j+1, batch_size))
+            data = examples['data'][j]
+            ts = data['ts1']
             d_name, d_func, d_type = data['d_name'], data['d_func'], data['d_type']
             d_value = data['d_value']
-            time = []
-            device = []
-            value = []
-            for j in range(len(d_name)):
-                month_j, day_j, hour_j, minute_j, second_j = (ts[j].month, ts[j].day, ts[j].hour,
-                                                              ts[j].minute, ts[j].second)
+            vect = np.empty((0, 770))
+            for i in range(len(d_name)):
+                # print('({}/{})'.format(i, len(d_name)-1))
+                device_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[i], d_func[i], d_type[i])
+                vec = sbert_model.encode([device_i])
+                device_arr = np.array(vec)
+                comb_arr = np.column_stack((ts[i], device_arr, d_value[i]))
+                vect = np.vstack((vect, comb_arr))
+            if vect.shape[0] > pad_len:
+                vect = vect[-pad_len:]
 
-                time_j = 'Month: {}, Day: {}, Hour: {}, Minute: {}, Second: {}'.format(month_j, day_j,
-                                                                                       hour_j, minute_j, second_j)
-                device_j = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
-                value_i = str(d_value[j])
-                time.append(time_j)
-                device.append(device_j)
-                value.append(value_i)
-            token_time = tokenizer(time, truncation=True, padding='max_length', max_length=max_length_time)
-            token_device = tokenizer(device, truncation=True, padding='max_length', max_length=max_length_device)
-            token_value = tokenizer(value, truncation=True, padding='max_length', max_length=max_length_value)
-            input_ids_i = torch.cat(
-                [torch.tensor(token_time['input_ids']), torch.tensor(token_device['input_ids']),
-                 torch.tensor(token_value['input_ids'])], dim=-1)
-            attention_mask_i = torch.cat(
-                [torch.tensor(token_time['attention_mask']), torch.tensor(token_device['attention_mask']),
-                 torch.tensor(token_value['attention_mask'])], dim=-1)
-            model_inputs['input_ids'].append(input_ids_i[:-1])
-            model_inputs['attention_mask'].append(attention_mask_i)
-            model_inputs['labels'].append(input_ids_i[[-1]])
-            sample_input_ids = model_inputs["input_ids"][i]
-            label_input_ids = torch.cat([model_inputs["labels"][i],
-                                         torch.tensor(tokenizer.pad_token_id).repeat(feature_size).unsqueeze(0)], dim=0)
-            model_inputs['input_ids'][i] = torch.cat([sample_input_ids, label_input_ids], dim=0)
-            mask_out = torch.tensor([-100]).expand_as(sample_input_ids)
-            model_inputs['labels'][i] = torch.cat([mask_out, label_input_ids], dim=0)
-            model_inputs["attention_mask"][i] = torch.cat([model_inputs['attention_mask'][i],
-                                                           torch.ones(1, feature_size)], dim=0)
-            # if len(model_inputs['input_ids']) > max_length:
-            #     print(len(model_inputs['input_ids']))
-            model_inputs['input_ids'][i] = model_inputs['input_ids'][i][-max_length:]
-            model_inputs['attention_mask'][i] = model_inputs['attention_mask'][i][-max_length:]
-            model_inputs['labels'][i] = model_inputs['labels'][i][-max_length:]
-        for i in range(batch_size):
-            sample_input_ids = model_inputs["input_ids"][i]
-            if len(sample_input_ids) < max_length:
-                pad_token = torch.tensor([tokenizer.pad_token_id]).expand(max_length -
-                                                                          len(sample_input_ids), feature_size)
-                model_inputs["input_ids"][i] = torch.cat([pad_token, model_inputs["input_ids"][i]], dim=0)
-                pad_token = torch.tensor([0]).expand(max_length - len(sample_input_ids), feature_size)
-                model_inputs["attention_mask"][i] = torch.cat([pad_token, model_inputs["attention_mask"][i]], dim=0)
-                pad_token = torch.tensor([-100]).expand(max_length - len(sample_input_ids), feature_size)
-                model_inputs["labels"][i] = torch.cat([pad_token, model_inputs["labels"][i]], dim=0)
-            model_inputs["input_ids"][i] = model_inputs["input_ids"][i].t()
-            model_inputs["attention_mask"][i] = model_inputs["attention_mask"][i].t()
-            model_inputs["labels"][i] = model_inputs["labels"][i].t()
-        return model_inputs
+            pad_width = ((0, pad_len - vect.shape[0]), (0, 0))
+            # print(vect.shape)
+            # print(pad_len - vect.shape[0])
+            padded_data = np.pad(vect, pad_width, mode='constant', constant_values=0)
+            padded_data = padded_data.reshape(1, pad_len, 770)
+            # padded_data = np.pad(vect, pad_width=((0, pad_len - len(vect[:, 0])), (0, 0)), mode='constant')
+            stacked_data = np.vstack((stacked_data, padded_data))
+
+#(50000, 1000, 770)    770输入 770输出
+
+        print(stacked_data.shape)
+        return stacked_data
 
     processed_dataset = {}
+    # 分别对训练集和测试集进行处理
     for split in dataset:
-        dataset[split].configure(['hh103'], 1200, 300, 2, (300,))
-        data = defaultdict(list)
-        for subset in dataset[split].subset:
-            for k in dataset[split].data[subset]:
-                data[k].extend(dataset[split].data[subset][k])
-        processed_dataset[split] = Dataset.from_dict(data)
+        dataset[split].configure(['hh103'], 1200, 300, 2, (300,))  # 这里的参数有实际意义吗？  更换其他subset
+        data = defaultdict(list)  # 访问不存在的键时，输出一个空列表[]
+        for subset in dataset[split].subset:  # 遍历训练集/测试集中的子集
+            for k in dataset[split].data[subset]:  # 遍历子集中的字典的key
+                data[k].extend(dataset[split].data[subset][k])  # 将子集中的键值对赋值给data
+        processed_dataset[split] = Dataset.from_dict(data)  # 从字典创建数据集
+        ar_data = preprocess_function_token(processed_dataset[split])
+        arr_split(ar_data, split, 50)
+        # dt_now = datetime.datetime.now().time().strftime('%H-%M-%S.%f')
+        # np.save(f'{split}_{dt_now}.npy', ar_data)
 
-        processed_dataset[split] = processed_dataset[split].map(
-            preprocess_function_token,
-            batched=True,
-            num_proc=1,
-            remove_columns=['data', 'target', 'detect'],
-            load_from_cache_file=False,
-            desc="Preprocess dataset",
-        )
+        # processed_dataset[split] = processed_dataset[split].map(
+        #     preprocess_function_token,
+        #     batched=True,
+        #     num_proc=1,            #并发处理量
+        #     remove_columns=['data', 'target', 'detect'],
+        #     load_from_cache_file=False,
+        #     desc="Preprocess dataset",
+        #     batch_size=2000
+        # )
 
-
-    print(processed_dataset)
-    print(torch.tensor(processed_dataset['train']['input_ids']).size())
-    data_0 = torch.tensor(processed_dataset['train']['input_ids'][0])
-    print(data_0.size())
-    text = tokenizer.batch_decode(data_0.t())
-    print(text[-5])
+    # print(f'Processed_dataset:\n\n{processed_dataset}')
+    # print(torch.tensor(processed_dataset['train']['input_ids']).size())
+    # data_0 = torch.tensor(processed_dataset['train']['input_ids'][0])
+    # print(data_0.size())
+    # # text = tokenizer.batch_decode(data_0.t())
+    # # print(text[-5])
     exit()
-
-    cfg['data_size'] = {k: len(processed_dataset[k]) for k in processed_dataset}
+    #
+    # cfg['data_size'] = {k: len(processed_dataset[k]) for k in processed_dataset}
     # cfg['target_size'] = processed_dataset['train'].target_size
     return processed_dataset
