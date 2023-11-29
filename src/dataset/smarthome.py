@@ -24,7 +24,8 @@ class SmartHome(Dataset):
         self.process()
         self.other = {}
 
-    def configure(self, subset=None, seq_len=None, hop_len=None, min_len=None, pred_len=None):  # 用于更新参数，子集（subset），序列长度（seq_len），跳跃长度（hop_len），最小长度（min_len）和预测长度（pred_len）
+    def configure(self, subset=None, seq_len=None, hop_len=None, min_len=None,
+                  pred_len=None):  # 用于更新参数，子集（subset），序列长度（seq_len），跳跃长度（hop_len），最小长度（min_len）和预测长度（pred_len）
         if subset:
             self.subset = subset
         if seq_len:
@@ -65,7 +66,7 @@ class SmartHome(Dataset):
             self.download()
         for subset in self.subset:
             data_path = os.path.join(self.processed_folder, subset, self.configuration)  # 数据子集路径
-            print(f'data_path:{data_path}')
+            print(f'data_path: {data_path}')
             if not check_exists(data_path):  # 如果子集路径不存在，建立子集路径
                 makedir_exist_ok(data_path)
                 train_set, test_set = self.make_data(subset)
@@ -96,15 +97,13 @@ class SmartHome(Dataset):
     def make_data(self, subset):
         print('----------------make_data-------------------')
         data = pd.read_csv(os.path.join(self.raw_folder, subset, 'data.csv'), delimiter=',')
-        subset_ratio = 0.01
+        subset_ratio = 0.01 # make it small for test
         split_index = int(subset_ratio * len(data))
         data = data[:split_index]
         env = pd.read_csv(os.path.join(self.raw_folder, subset, 'env.csv'), delimiter=',')
         data = data[['ts', 'd_name', 'd_type', 'd_func', 'd_value']]
 
         data['ts'] = pd.to_datetime(data['ts'])
-
-
 
         # Normalization
         time_start = data['ts'].iloc[0]
@@ -114,7 +113,8 @@ class SmartHome(Dataset):
 
         data.loc[data['d_func'] == 'lamp', 'd_value'] = data.loc[data['d_func'] == 'lamp', 'd_value'] / 100.0
         data.loc[data['d_func'] == 'light', 'd_value'] = data.loc[data['d_func'] == 'light', 'd_value'] / 100.0
-        data.loc[data['d_func'] == 'temperature', 'd_value'] = data.loc[data['d_func'] == 'temperature', 'd_value'] / 50.0
+        data.loc[data['d_func'] == 'temperature', 'd_value'] = data.loc[
+                                                                   data['d_func'] == 'temperature', 'd_value'] / 50.0
 
         # print('Normalization test max:{},min:{}'.format(data['d_value'].max(), data['d_value'].min()))
         # print('Normalization test max:{},min:{}'.format(data['ts1'].max(), data['ts1'].min()))
@@ -124,31 +124,31 @@ class SmartHome(Dataset):
         train_data = data[:split_index]
         test_data = data[split_index:]
 
-        print(f'-----------len(train_data):{len(train_data)}')
-        print(f'-----------len(test_data):{len(test_data)}')
+        print(f'-----------len(train_data): {len(train_data)}')
+        print(f'-----------len(test_data): {len(test_data)}')
 
-        unique_count = train_data['d_type'].value_counts()
-        print(unique_count)
-        unique_count = test_data['d_type'].value_counts()
-        print(unique_count)
+        unique_count = len(train_data['d_type'].unique())
+        print('Number of unique d_type in train_data: {}'.format(unique_count))
+        unique_count = len(test_data['d_type'].unique())
+        print('Number of unique d_type in test_data: {}'.format(unique_count))
 
         train_data, train_start_times = self.batchify(train_data)
         test_data, test_start_times = self.batchify(test_data)
 
-        print(f'-----------train_data:{len(train_start_times)}')
-        print(f'-----------test_data:{len(test_start_times)}')
+        print(f'-----------len(train_start_times): {len(train_start_times)}')
+        print(f'-----------len(test_start_times): {len(test_start_times)}')
 
         train_meta = (train_start_times, env)
         test_meta = (test_start_times, env)
         return (train_data, train_meta), (test_data, test_meta)
-
 
     def process_chunk(self, chunk_args):
         chunk, seq_len, min_len, pred_len, controller_data, dataset = chunk_args  # 读取元组数据
         data = {'data': [], 'target': [], 'detect': []}
         for t_start in tqdm(chunk, desc="Processing chunk", leave=False):  # 遍历chunk中的start_times
             t_end = t_start + seq_len
-            data_i = dataset[(dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]  # 以t_start为起点，t_end为终点，在dataset中获取data_i
+            data_i = dataset[
+                (dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]  # 以t_start为起点，t_end为终点，在dataset中获取data_i
             if len(data_i) < min_len:  # data_i小于最小长度时结束处理
                 continue
             target_i = []
@@ -157,7 +157,8 @@ class SmartHome(Dataset):
                 pred_len_j = pred_len[j]  # 给pred_len_j赋值
                 t_pred_end_j = t_end + pred_len_j
                 target_i_j = controller_data[
-                    (controller_data['ts'] < t_pred_end_j) & (controller_data['ts'] >= t_end)]  # 以t_end为起点，t_pred_end_j为终点，在controller_data中获取target_i_j，即在预测范围内的controller_data数据
+                    (controller_data['ts'] < t_pred_end_j) & (controller_data[
+                                                                  'ts'] >= t_end)]  # 以t_end为起点，t_pred_end_j为终点，在controller_data中获取target_i_j，即在预测范围内的controller_data数据
                 detect_i_j = 1 if not target_i_j.empty else 0  # 当target_i_j不为空，detect_i_j = 1，反之为0
                 target_i.append(target_i_j)
                 detect_i.append(detect_i_j)
@@ -165,6 +166,35 @@ class SmartHome(Dataset):
             data['target'].append(target_i)  # 每个序列后预测范围内的controller_data数据
             data['detect'].append(detect_i)  # 每个序列后预测范围内是否有controller_data
         return data
+
+    def batchify(self, dataset):
+        seq_len = pd.Timedelta(seconds=self.seq_len)  # 序列长度
+        hop_len = pd.Timedelta(seconds=self.hop_len)  # 跳跃长度
+        min_len = self.min_len  # 最小长度
+        pred_len = [pd.Timedelta(seconds=p) for p in self.pred_len]  # 预测长度列表，可包含多个预测长度
+        start_times = pd.date_range(start=dataset.iloc[0]['ts'], end=dataset.iloc[-1]['ts'] - seq_len,
+                                    freq=hop_len)  # 以第一个时间为起点，以300秒为间隔，获取开始时间列表
+        controller_data = dataset[dataset['d_type'] == 'controller']  # 控制器数据
+
+        # Split start_times into chunks
+        n_chunks = 4  # Number of chunks, can be adjusted
+        chunks = np.array_split(start_times, n_chunks)  # 将start_timies平均切割为4份
+        args = [(chunk, seq_len, min_len, pred_len, controller_data, dataset) for chunk in
+                chunks]  # 将每份数据chunk、序列长度、最小长度、预测长度、全部控制器数据、全部数据组成元组，将各元组以列表形式保存到args中
+
+        with Pool() as pool:
+            results = list(tqdm(pool.imap(self.process_chunk, args),
+                                total=len(chunks)))  # 将args传递给self.process_chunk函数在一个池中的独立进程上并行处理，处理结果保存到列表results中
+
+        # Combine results
+        data = {'data': [], 'target': [], 'detect': []}
+        for result in results:
+            data['data'].extend(result['data'])
+            data['target'].extend(result['target'])
+            data['detect'].extend(result['detect'])
+
+        return data, start_times
+
 
 
     # def batchify(self, dataset):
@@ -202,52 +232,3 @@ class SmartHome(Dataset):
     #     return data, start_times
 
     # seq_len = 1200, hop_len = 300, pred_len = (300,), min_len = 2
-    def batchify(self, dataset):
-        seq_len = pd.Timedelta(seconds=self.seq_len)  # 序列长度
-        hop_len = pd.Timedelta(seconds=self.hop_len)  # 跳跃长度
-        min_len = self.min_len  # 最小长度
-        pred_len = [pd.Timedelta(seconds=p) for p in self.pred_len]  # 预测长度列表，可包含多个预测长度
-        start_times = pd.date_range(start=dataset.iloc[0]['ts'], end=dataset.iloc[-1]['ts'] - seq_len, freq=hop_len)  # 以第一个时间为起点，以300秒为间隔，获取开始时间列表
-        controller_data = dataset[dataset['d_type'] == 'controller']  # 控制器数据
-
-        # Split start_times into chunks
-        n_chunks = 4  # Number of chunks, can be adjusted
-        chunks = np.array_split(start_times, n_chunks)  # 将start_timies平均切割为4份
-        args = [(chunk, seq_len, min_len, pred_len, controller_data, dataset) for chunk in chunks] # 将每份数据chunk、序列长度、最小长度、预测长度、全部控制器数据、全部数据组成元组，将各元组以列表形式保存到args中
-        # for i in args[0]:
-        #     print('-----------------------')
-        #     print(i)
-        # result = self.process_chunk(args[0])
-        # print(len(result['data']))
-        # os.system('pause')
-
-        # 多线程池   取消
-        with Pool() as pool:
-            results = list(tqdm(pool.imap(self.process_chunk, args), total=len(chunks)))  # 将args传递给self.process_chunk函数在一个池中的独立进程上并行处理，处理结果保存到列表results中
-
-        # Combine results
-        data = {'data': [], 'target': [], 'detect': []}
-        for result in results:
-            data['data'].extend(result['data'])
-            data['target'].extend(result['target'])
-            data['detect'].extend(result['detect'])
-
-        # import matplotlib.pyplot as plt
-        #
-        # Assuming data['data'] is a list of lists, and you want to plot the lengths of the inner lists
-        # from collections import Counter
-        #
-        # # Assuming data['data'] is a list of lists, and you want to print the counts of unique lengths of the inner lists
-        # lengths = [len(element) for element in data['data']]
-        # unique_length_counts = Counter(lengths)
-        # print("Unique Lengths and Their Counts:")
-        # for length, count in unique_length_counts.items():
-        #     print(f"Length: {length}, Count: {count}")
-        #
-        # plt.hist(lengths, bins='auto')  # You can specify the number of bins or leave it as 'auto'
-        # plt.title('Histogram of Lengths')
-        # plt.xlabel('Length')
-        # plt.ylabel('Frequency')
-        # plt.show()
-        print(len)
-        return data, start_times

@@ -2,15 +2,13 @@ import dataset
 import numpy as np
 import os
 import torch
-import datetime
 from collections import defaultdict
 from datasets import Dataset
+from sentence_transformers import SentenceTransformer
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 from config import cfg
-
-from tqdm.auto import tqdm
 
 data_stats = {'MNIST': ((0.1307,), (0.3081,)), 'FashionMNIST': ((0.2860,), (0.3530,)),
               'CIFAR10': ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
@@ -106,9 +104,8 @@ def collate(input):
     return input
 
 
-# sentence bert。。。。 average across 变成一维矢量
+# sentence bert  average across vectors 变成一维矢量
 def process_dataset(dataset):
-
     def arr_split(arr, split_name, split_size):
         splits = np.split(arr, np.arange(split_size, arr.shape[0], split_size))
         if splits[-1].shape[0] != split_size:
@@ -119,15 +116,15 @@ def process_dataset(dataset):
         return splits
 
     def preprocess_function_token(examples):
-        from sentence_transformers import SentenceTransformer
-        sbert_model = SentenceTransformer('sbert')
+        sbert_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
+                                          cache_folder=os.path.join('output', 'model'))
         batch_size = len(examples['data'])
         print('-------------batch size:{}'.format(batch_size))
         pad_len = 1000
 
-        stacked_data = np.empty((0, pad_len, 770))  #var
+        stacked_data = np.empty((0, pad_len, 770))  # var
         for j in range(batch_size):
-            print('({}/{})'.format(j+1, batch_size))
+            print('({}/{})'.format(j + 1, batch_size))
             data = examples['data'][j]
             ts = data['ts1']
             d_name, d_func, d_type = data['d_name'], data['d_func'], data['d_type']
@@ -151,7 +148,7 @@ def process_dataset(dataset):
             # padded_data = np.pad(vect, pad_width=((0, pad_len - len(vect[:, 0])), (0, 0)), mode='constant')
             stacked_data = np.vstack((stacked_data, padded_data))
 
-#(50000, 1000, 770)    770输入 770输出
+        # (50000, 1000, 770)    770输入 770输出
 
         print(stacked_data.shape)
         return stacked_data
