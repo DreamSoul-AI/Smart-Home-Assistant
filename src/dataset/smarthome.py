@@ -109,7 +109,7 @@ class SmartHome(Dataset):
         time_start = data['ts'].iloc[0]
         time_end = data['ts'].iloc[-1]
         time_range = time_end - time_start
-        data['ts1'] = (data['ts'] - time_start) / time_range
+        data['ts_normalized'] = (data['ts'] - time_start) / time_range
 
         data.loc[data['d_func'] == 'lamp', 'd_value'] = data.loc[data['d_func'] == 'lamp', 'd_value'] / 100.0
         data.loc[data['d_func'] == 'light', 'd_value'] = data.loc[data['d_func'] == 'light', 'd_value'] / 100.0
@@ -117,7 +117,7 @@ class SmartHome(Dataset):
                                                                    data['d_func'] == 'temperature', 'd_value'] / 50.0
 
         # print('Normalization test max:{},min:{}'.format(data['d_value'].max(), data['d_value'].min()))
-        # print('Normalization test max:{},min:{}'.format(data['ts1'].max(), data['ts1'].min()))
+        # print('Normalization test max:{},min:{}'.format(data['ts_normalized'].max(), data['ts_normalized'].min()))
 
         split_ratio = 0.9
         split_index = int(split_ratio * len(data))
