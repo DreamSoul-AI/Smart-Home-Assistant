@@ -8,6 +8,7 @@ from functools import partial
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
+from torch.nn.utils.rnn import pad_sequence
 from config import cfg
 
 data_stats = {'MNIST': ((0.1307,), (0.3081,)), 'FashionMNIST': ((0.2860,), (0.3530,)),
@@ -102,7 +103,11 @@ def make_data_loader(dataset, tag, batch_size=None, shuffle=None, sampler=None):
 
 def collate(input):
     for k in input:
-        input[k] = torch.stack(input[k], 0)
+        if k in ['data']:
+            input[k] = pad_sequence(input[k], batch_first=True, padding_value=0.0)
+        elif k in ['target', 'detect']:
+            input[k] = torch.stack(input[k], 0)
+    input['mask'] = input['data'] != 0
     return input
 
 
@@ -112,15 +117,6 @@ def process_dataset(dataset):
     cfg['data_size'] = {k: len(processed_dataset[k]) for k in processed_dataset}
     return processed_dataset
 
-    # if d_vec.shape[0] >= max_length:
-    #     d_vec = d_vec[-max_length:]
-    #     attention_mask = np.ones(max_length)
-    # else:
-    #     org_width = d_vec.shape[0]
-    #     pad_width_ = max_length - org_width
-    #     pad_width = ((pad_width_, 0), (0, 0))
-    #     d_vec = np.pad(d_vec, pad_width, mode='constant', constant_values=0)
-    #     attention_mask = np.concatenate([np.zeros(pad_width_), np.ones(org_width)], axis=0)
 
 def encode(tokenizer, input):
     encoded_input = {'data': [], 'target': [], 'detect': []}
@@ -151,4 +147,3 @@ def encode(tokenizer, input):
     else:
         encoded_input['target'] = torch.tensor(input['target'])
     return encoded_input
-

@@ -13,11 +13,11 @@ def make_metric(metric_name):
         for k in metric_name:
             metric_name[k].extend(['Accuracy'])
     if cfg['data_name'] in ['SmartHome']:
-        pivot = -float('inf')
-        pivot_direction = 'up'
-        pivot_name = 'Accuracy'
+        pivot = float('inf')
+        pivot_direction = 'down'
+        pivot_name = 'RMSE'
         for k in metric_name:
-            metric_name[k].extend(['Accuracy'])
+            metric_name[k].extend(['RMSE'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, pivot, pivot_direction, pivot_name)
@@ -60,7 +60,7 @@ class Metric:
                 elif m == 'RMSE':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
-                                            lambda input, output: recur(RMSE, output['target'], input['target']))}
+                                            lambda input, output: recur(RMSE, output['target'], input['label']))}
                 else:
                     raise ValueError('Not valid metric name')
         return metric

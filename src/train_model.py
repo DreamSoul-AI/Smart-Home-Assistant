@@ -64,7 +64,6 @@ def runExperiment():
     for epoch in range(cfg['epoch'], cfg[cfg['model_name']]['num_epochs'] + 1):
         cfg['epoch'] = epoch
         train(data_loader['train'], model, optimizer, scheduler, metric, logger)
-        exit()
         test(data_loader['test'], model, metric, logger)
         result = {'cfg': cfg, 'epoch': cfg['epoch'] + 1, 'model_state_dict': model.state_dict(),
                   'optimizer_state_dict': optimizer.state_dict(), 'scheduler_state_dict': scheduler.state_dict(),

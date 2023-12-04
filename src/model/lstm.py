@@ -1,14 +1,14 @@
 import torch
 import torch.nn as nn
-import math
+import torch.nn.functional as F
 from config import cfg
-from .model import init_param, make_loss
+from .model import init_param
 
 
 class LSTM(nn.Module):
     def __init__(self, data_shape, hidden_size, num_layers, target_size):
         super().__init__()
-        input_size = data_shape[1]
+        input_size = data_shape[0]
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers=num_layers, bias=True, batch_first=True,
                             dropout=0.0, bidirectional=False)
         self.linear = nn.Linear(hidden_size, target_size)
@@ -22,7 +22,7 @@ class LSTM(nn.Module):
         return x
 
     def f(self, x):
-        x = self.feature(x)
+        x, _ = self.feature(x)
         x = self.output(x)
         return x
 
@@ -31,7 +31,11 @@ class LSTM(nn.Module):
         x = input['data']
         x = self.f(x)
         output['target'] = x
-        output['loss'] = make_loss(output, input)
+        mask = input['mask'][..., :-1, :].contiguous()
+        output['target'] = output['target'][..., :-1, :].contiguous()
+        input['label'] = input['data'][..., 1:, :].contiguous()
+        loss = F.mse_loss(output['target'], input['label'], reduction='none')
+        output['loss'] = loss[mask].mean()
         return output
 
 

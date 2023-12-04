@@ -22,12 +22,13 @@ def process_control():
     cfg['target_size'] = cfg['data_shape'][0]
     model_name = cfg['model_name']
     cfg[model_name]['shuffle'] = {'train': True, 'test': False}
-    cfg[model_name]['optimizer_name'] = 'SGD'
-    cfg[model_name]['lr'] = 1e-1
+    cfg[model_name]['optimizer_name'] = 'Adam'
+    cfg[model_name]['lr'] = 1e-3
     cfg[model_name]['momentum'] = 0.9
+    cfg[model_name]['betas'] = (0.9, 0.999)
     cfg[model_name]['weight_decay'] = 5e-4
     cfg[model_name]['nesterov'] = True
     cfg[model_name]['scheduler_name'] = 'CosineAnnealingLR'
-    cfg[model_name]['num_epochs'] = 400
+    cfg[model_name]['num_epochs'] = 100
     cfg[model_name]['batch_size'] = {'train': 250, 'test': 250}
     return
