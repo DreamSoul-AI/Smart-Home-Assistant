@@ -1,15 +1,18 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import model
+from sentence_transformers import SentenceTransformer
 from config import cfg
 
 
 def make_model(model_name):
     model = eval('model.{}()'.format(model_name))
-    model = model.to(cfg['device'])
-    return model
+    tokenizer = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
+                                      cache_folder=os.path.join('output', 'model'))
+    return model, tokenizer
 
 
 def make_loss(output, input):

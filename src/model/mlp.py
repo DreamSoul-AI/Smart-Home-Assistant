@@ -28,14 +28,14 @@ class MLP(nn.Module):
         x = self.blocks(x)
         return x
 
-    def classify(self, x):
+    def output(self, x):
         x = self.linear(x)
         return x
 
     def f(self, x):
         x = self.feature(x)
         x = self.classify(x)
-        return x
+        return output
 
     def forward(self, input):
         output = {}

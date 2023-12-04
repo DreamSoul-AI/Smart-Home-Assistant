@@ -25,7 +25,7 @@ class SmartHome(Dataset):
         self.other = {}
 
     def configure(self, subset=None, seq_len=None, hop_len=None, min_len=None,
-                  pred_len=None):  # 用于更新参数，子集（subset），序列长度（seq_len），跳跃长度（hop_len），最小长度（min_len）和预测长度（pred_len）
+                  pred_len=None, transform=None):  # 用于更新参数，子集（subset），序列长度（seq_len），跳跃长度（hop_len），最小长度（min_len）和预测长度（pred_len）
         if subset:
             self.subset = subset
         if seq_len:
@@ -36,6 +36,7 @@ class SmartHome(Dataset):
             self.min_len = min_len
         if pred_len:
             self.pred_len = pred_len
+        self.transform = transform
         self.configuration = '{}_{}_{}_{}'.format(self.seq_len, self.hop_len, self.min_len,
                                                   '-'.join(map(str, self.pred_len)))
         return
@@ -45,6 +46,8 @@ class SmartHome(Dataset):
         index_ = index if subset_index == 0 else index - self.length[subset_index - 1]
         subset = self.subset[subset_index]
         input = {k: self.data[subset][k][index_] for k in self.data[subset]}
+        if self.transform is not None:
+            input = self.transform(input)
         return input
 
     def __len__(self):
@@ -62,8 +65,8 @@ class SmartHome(Dataset):
     def process(self):
         self.configure()
 
-        if not check_exists(self.raw_folder):  # 当root\raw文件夹不存在时，抛出报错
-            self.download()
+        # if not check_exists(self.raw_folder):  # 当root\raw文件夹不存在时，抛出报错
+        #     self.download()
         for subset in self.subset:
             data_path = os.path.join(self.processed_folder, subset, self.configuration)  # 数据子集路径
             print(f'data_path: {data_path}')
@@ -163,8 +166,8 @@ class SmartHome(Dataset):
                 target_i.append(target_i_j)
                 detect_i.append(detect_i_j)
             data['data'].append(data_i)  # 每个序列数据
-            data['target'].append(target_i)  # 每个序列后预测范围内的controller_data数据
-            data['detect'].append(detect_i)  # 每个序列后预测范围内是否有controller_data
+            data['target'].extend(target_i)  # 每个序列后预测范围内的controller_data数据
+            data['detect'].extend(detect_i)  # 每个序列后预测范围内是否有controller_data
         return data
 
     def batchify(self, dataset):
@@ -192,7 +195,6 @@ class SmartHome(Dataset):
             data['data'].extend(result['data'])
             data['target'].extend(result['target'])
             data['detect'].extend(result['detect'])
-
         return data, start_times
 
 

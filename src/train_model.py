@@ -39,9 +39,11 @@ def runExperiment():
     model_tag_path = os.path.join(model_path, cfg['model_tag'])
     checkpoint_path = os.path.join(model_tag_path, 'checkpoint')
     best_path = os.path.join(model_tag_path, 'best')
-    dataset = make_dataset(cfg['data_name'])
+    model, encoder = make_model(cfg['model_name'])
+    model = model.to(cfg['device'])
+    encoder = encoder.to(cfg['device'])
+    dataset = make_dataset(cfg['data_name'], encoder)
     dataset = process_dataset(dataset)
-    model = make_model(cfg['model_name'])
     data_loader = make_data_loader(dataset, cfg['model_name'])
     metric = make_metric({'train': ['Loss'], 'test': ['Loss']})
     logger = make_logger(os.path.join('output', 'runs', 'train_{}'.format(cfg['model_tag'])))
@@ -62,6 +64,7 @@ def runExperiment():
     for epoch in range(cfg['epoch'], cfg[cfg['model_name']]['num_epochs'] + 1):
         cfg['epoch'] = epoch
         train(data_loader['train'], model, optimizer, scheduler, metric, logger)
+        exit()
         test(data_loader['test'], model, metric, logger)
         result = {'cfg': cfg, 'epoch': cfg['epoch'] + 1, 'model_state_dict': model.state_dict(),
                   'optimizer_state_dict': optimizer.state_dict(), 'scheduler_state_dict': scheduler.state_dict(),

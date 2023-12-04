@@ -3,20 +3,23 @@ from config import cfg
 
 def process_control():
     cfg['collate_mode'] = 'dict'
+    cfg['embedding_size'] = 768 + 2
     cfg['max_length'] = 128
     data_shape = {'MNIST': [1, 28, 28], 'FashionMNIST': [1, 28, 28], 'SVHN': [3, 32, 32], 'CIFAR10': [3, 32, 32],
-                  'CIFAR100': [3, 32, 32], 'SmartHome': [4, cfg['max_length']]}
+                  'CIFAR100': [3, 32, 32], 'SmartHome': [cfg['embedding_size'], cfg['max_length']]}
     cfg['linear'] = {}
     cfg['mlp'] = {'hidden_size': 128, 'scale_factor': 2, 'num_layers': 2, 'activation': 'relu'}
     cfg['cnn'] = {'hidden_size': [64, 128, 256, 512]}
+    cfg['lstm'] = {'hidden_size': 128, 'num_layers': 2}
     cfg['resnet9'] = {'hidden_size': [64, 128, 256, 512]}
     cfg['resnet18'] = {'hidden_size': [64, 128, 256, 512]}
     cfg['wresnet28x2'] = {'depth': 28, 'widen_factor': 2, 'drop_rate': 0.0}
     cfg['wresnet28x8'] = {'depth': 28, 'widen_factor': 8, 'drop_rate': 0.0}
-    cfg['lstm'] = {'max_length': cfg['max_length']}
+    cfg['lstm'] = {'hidden_size': 128, 'num_layers': 2}
     cfg['data_name'] = cfg['control']['data_name']
     cfg['data_shape'] = data_shape[cfg['data_name']]
     cfg['model_name'] = cfg['control']['model_name']
+    cfg['target_size'] = cfg['data_shape'][0]
     model_name = cfg['model_name']
     cfg[model_name]['shuffle'] = {'train': True, 'test': False}
     cfg[model_name]['optimizer_name'] = 'SGD'
