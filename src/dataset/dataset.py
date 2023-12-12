@@ -17,7 +17,7 @@ data_stats = {'MNIST': ((0.1307,), (0.3081,)), 'FashionMNIST': ((0.2860,), (0.35
               'SVHN': ((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970))}
 
 
-def make_dataset(data_name, encoder=None, verbose=True):
+def make_dataset(data_name, tokenizer=None, verbose=True):
     dataset_ = {}
     if verbose:
         print('fetching data {}...'.format(data_name))
@@ -61,8 +61,8 @@ def make_dataset(data_name, encoder=None, verbose=True):
     elif data_name in ['SmartHome']:
         dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=['hh103'])
         dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=['hh103'])
-        dataset_['train'].transform = dataset.Compose([partial(tokenize, encoder)])
-        dataset_['test'].transform = dataset.Compose([partial(tokenize, encoder)])
+        dataset_['train'].transform = dataset.Compose([tokenizer.tokenize])
+        dataset_['test'].transform = dataset.Compose([tokenizer.tokenize])
     else:
         raise ValueError('Not valid dataset name')
     if verbose:
@@ -118,34 +118,3 @@ def process_dataset(dataset):
     processed_dataset = dataset
     cfg['data_size'] = {k: len(processed_dataset[k]) for k in processed_dataset}
     return processed_dataset
-
-
-def tokenize(encoder, input):
-    encoded_input = {'data': [], 'target': [], 'detect': []}
-    data = input['data']
-    ts = np.array(data['ts_normalized']).reshape(-1, 1)
-    d_value = np.array(data['d_value']).reshape(-1, 1)
-    d_name, d_func, d_type = data['d_name'].tolist(), data['d_func'].tolist(), data['d_type'].tolist()
-    d_info = []
-    for j in range(len(d_name)):
-        d_info_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
-        d_info.append(d_info_i)
-    d_vec = encoder.encode(d_info)
-    d_vec = np.concatenate([ts, d_vec, d_value], axis=-1)
-    encoded_input['data'] = torch.tensor(d_vec).float()
-    encoded_input['detect'] = torch.tensor(input['detect'])
-    if not input['target'].empty:
-        target = input['target']
-        ts = np.array(data['ts_normalized']).reshape(-1, 1)
-        d_value = np.array(data['d_value']).reshape(-1, 1)
-        d_name, d_func, d_type = target['d_name'].tolist(), target['d_func'].tolist(), target['d_type'].tolist()
-        d_info = []
-        for j in range(len(d_name)):
-            d_info_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
-            d_info.append(d_info_i)
-        d_vec = encoder.encode(d_info)
-        d_vec = np.concatenate([ts, d_vec, d_value], axis=-1)
-        encoded_input['target'] = torch.tensor(d_vec).float()
-    else:
-        encoded_input['target'] = torch.tensor(input['target'])
-    return encoded_input

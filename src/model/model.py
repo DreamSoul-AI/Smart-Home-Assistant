@@ -4,15 +4,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import model
-from sentence_transformers import SentenceTransformer
 from config import cfg
 
 
 def make_model(model_name):
     model = eval('model.{}()'.format(model_name))
-    encoder = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
-                                  cache_folder=os.path.join('output', 'model'))
-    return model, encoder
+    tokenizer = model.tokenizer()
+    return model, tokenizer
 
 
 def make_loss(output, input):
@@ -72,6 +70,12 @@ def make_batchnorm(m, momentum, track_running_stats):
             m.running_var = None
             m.num_batches_tracked = None
     return m
+
+
+def make_tokenizer(data_loader):
+    for i, input in enumerate(data_loader):
+        pass
+    return
 
 
 def make_optimizer(parameters, tag):

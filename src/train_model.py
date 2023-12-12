@@ -8,7 +8,7 @@ import torch.backends.cudnn as cudnn
 from config import cfg, process_args
 from dataset import make_dataset, make_data_loader, process_dataset, collate
 from metric import make_metric, make_logger
-from model import make_model, make_optimizer, make_scheduler
+from model import make_model, make_tokenizer, make_optimizer, make_scheduler
 from module import save, to_device, process_control, resume, makedir_exist_ok
 
 cudnn.benchmark = True
@@ -39,10 +39,10 @@ def runExperiment():
     model_tag_path = os.path.join(model_path, cfg['model_tag'])
     checkpoint_path = os.path.join(model_tag_path, 'checkpoint')
     best_path = os.path.join(model_tag_path, 'best')
-    model, encoder = make_model(cfg['model_name'])
+    model, tokenizer = make_model(cfg['model_name'])
     model = model.to(cfg['device'])
-    encoder = encoder.to(cfg['device'])
-    dataset = make_dataset(cfg['data_name'], encoder)
+    tokenizer.encoder = tokenizer.encoder.to(cfg['device'])
+    dataset = make_dataset(cfg['data_name'], tokenizer)
     dataset = process_dataset(dataset)
     data_loader = make_data_loader(dataset, cfg['model_name'])
     metric = make_metric({'train': ['Loss'], 'test': ['Loss']})
@@ -50,11 +50,13 @@ def runExperiment():
     result = resume(os.path.join(checkpoint_path, 'model'), resume_mode=cfg['resume_mode'])
     if result is None:
         cfg['epoch'] = 1
+        tokenizer = make_tokenizer(data_loader['train'])
         optimizer = make_optimizer(model.parameters(), cfg['model_name'])
         scheduler = make_scheduler(optimizer, cfg['model_name'])
     else:
         cfg['epoch'] = result['epoch']
         model.load_state_dict(result['model_state_dict'])
+        tokenizer.load_state_dict(result['tokenizer_state_dict'])
         optimizer = make_optimizer(model.parameters(), cfg['model_name'])
         optimizer.load_state_dict(result['optimizer_state_dict'])
         scheduler = make_scheduler(optimizer, cfg['model_name'])
@@ -63,11 +65,12 @@ def runExperiment():
         logger.load_state_dict(result['logger_state_dict'])
     for epoch in range(cfg['epoch'], cfg[cfg['model_name']]['num_epochs'] + 1):
         cfg['epoch'] = epoch
-        train(data_loader['train'], model, optimizer, scheduler, metric, logger)
+        train(data_loader['train'], model, tokenizer, optimizer, scheduler, metric, logger)
         test(data_loader['test'], model, metric, logger)
         result = {'cfg': cfg, 'epoch': cfg['epoch'] + 1, 'model_state_dict': model.state_dict(),
                   'optimizer_state_dict': optimizer.state_dict(), 'scheduler_state_dict': scheduler.state_dict(),
-                  'metric_state_dict': metric.state_dict(), 'logger_state_dict': logger.state_dict()}
+                  'metric_state_dict': metric.state_dict(), 'logger_state_dict': logger.state_dict(),
+                  'tokenizer_state_dict': tokenizer.state_dict()}
         save(result, os.path.join(checkpoint_path, 'model'))
         if metric.compare(logger.mean['test/{}'.format(metric.pivot_name)]):
             metric.update(logger.mean['test/{}'.format(metric.pivot_name)])
@@ -78,12 +81,11 @@ def runExperiment():
     return
 
 
-def train(data_loader, model, optimizer, scheduler, metric, logger):
+def train(data_loader, model, tokenizer, optimizer, scheduler, metric, logger):
     model.train(True)
     start_time = time.time()
     for i, input in enumerate(data_loader):
         input = collate(input)
-        input['tokenizer'] = None
         input_size = input['data'].size(0)
         input = to_device(input, cfg['device'])
         output = model(input)
@@ -91,6 +93,7 @@ def train(data_loader, model, optimizer, scheduler, metric, logger):
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
         optimizer.zero_grad()
+        input['tokenizer'] = tokenizer
         evaluation = metric.evaluate('train', 'batch', input, output)
         logger.append(evaluation, 'train', n=input_size)
         if i % int((len(data_loader) * cfg['log_interval']) + 1) == 0:

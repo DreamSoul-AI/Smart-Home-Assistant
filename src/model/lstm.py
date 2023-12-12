@@ -31,7 +31,6 @@ class LSTM(nn.Module):
         x = input['data']
         x = self.f(x)
         output['target'] = x
-        output['target'][..., 0].clamp_(0, 1)
         mask = input['mask'][:, 1:]
         output_target = output['target'][:, :-1][mask]
         input_target = input['data'][:, 1:][mask]
