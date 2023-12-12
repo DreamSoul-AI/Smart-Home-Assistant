@@ -42,15 +42,11 @@ def RMSE(output, target):
 
 
 def mae_time(output, target, mask):
-    output_mask = mask[:, :-1]
-    target_mask = mask[:, 1:]
-    output_ts = output[:, :-1, 0][output_mask]
-    target_ts = target[:, 1:, 0][target_mask]
-    mae = F.l1_loss(output_ts, target_ts, reduction='none')
-    print((mae[mask]==0).sum())
-    mae = mae[mask].mean()
-    print(mae)
-    exit()
+    mask = mask[:, 1:]
+    output_ts = output[:, :-1, 0][mask]
+    target_ts = target[:, 1:, 0][mask]
+    mae = F.l1_loss(output_ts, target_ts, reduction='mean')
+    mae = mae.item()
     return mae
 
 

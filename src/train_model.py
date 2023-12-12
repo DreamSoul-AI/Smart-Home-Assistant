@@ -83,6 +83,7 @@ def train(data_loader, model, optimizer, scheduler, metric, logger):
     start_time = time.time()
     for i, input in enumerate(data_loader):
         input = collate(input)
+        input['tokenizer'] = None
         input_size = input['data'].size(0)
         input = to_device(input, cfg['device'])
         output = model(input)

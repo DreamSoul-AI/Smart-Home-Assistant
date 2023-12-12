@@ -104,10 +104,12 @@ def make_data_loader(dataset, tag, batch_size=None, shuffle=None, sampler=None):
 def collate(input):
     for k in input:
         if k in ['data']:
+            length = torch.tensor([len(input[k][i]) for i in range(len(input[k]))])
+            max_length = length.max()
             input[k] = pad_sequence(input[k], batch_first=True, padding_value=0.0)
         elif k in ['target', 'detect']:
             input[k] = torch.stack(input[k], 0)
-    input['mask'] = input['data'].sum(dim=-1) != 0
+    input['mask'] = torch.arange(max_length).expand(len(length), max_length) < length.unsqueeze(1)
     return input
 
 

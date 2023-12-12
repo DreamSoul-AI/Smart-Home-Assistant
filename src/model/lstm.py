@@ -32,10 +32,9 @@ class LSTM(nn.Module):
         x = self.f(x)
         output['target'] = x
         output['target'][..., 0].clamp_(0, 1)
-        output_target_mask = input['mask'][:, :-1]
-        input_target_mask = input['mask'][:, 1:]
-        output_target = output['target'][:, :-1][output_target_mask]
-        input_target = input['data'][:, 1:][input_target_mask]
+        mask = input['mask'][:, 1:]
+        output_target = output['target'][:, :-1][mask]
+        input_target = input['data'][:, 1:][mask]
         loss = F.mse_loss(output_target, input_target, reduction='mean')
         output['loss'] = loss
         return output
