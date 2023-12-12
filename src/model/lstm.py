@@ -31,11 +31,13 @@ class LSTM(nn.Module):
         x = input['data']
         x = self.f(x)
         output['target'] = x
-        mask = input['mask'][..., :-1, :].contiguous()
-        output['target'] = output['target'][..., :-1, :].contiguous()
-        input['label'] = input['data'][..., 1:, :].contiguous()
-        loss = F.mse_loss(output['target'], input['label'], reduction='none')
-        output['loss'] = loss[mask].mean()
+        output['target'][..., 0].clamp_(0, 1)
+        output_target_mask = input['mask'][:, :-1]
+        input_target_mask = input['mask'][:, 1:]
+        output_target = output['target'][:, :-1][output_target_mask]
+        input_target = input['data'][:, 1:][input_target_mask]
+        loss = F.mse_loss(output_target, input_target, reduction='mean')
+        output['loss'] = loss
         return output
 
 

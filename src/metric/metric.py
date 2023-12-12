@@ -15,9 +15,9 @@ def make_metric(metric_name):
     if cfg['data_name'] in ['SmartHome']:
         pivot = float('inf')
         pivot_direction = 'down'
-        pivot_name = 'RMSE'
+        pivot_name = 'Loss'
         for k in metric_name:
-            metric_name[k].extend(['RMSE'])
+            metric_name[k].extend(['MAE-ar-time', 'Accuracy-ar-d~info', 'MSE-ar-d~value'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, pivot, pivot_direction, pivot_name)
@@ -41,6 +41,29 @@ def RMSE(output, target):
     return rmse
 
 
+def mae_time(output, target, mask):
+    output_mask = mask[:, :-1]
+    target_mask = mask[:, 1:]
+    output_ts = output[:, :-1, 0][output_mask]
+    target_ts = target[:, 1:, 0][target_mask]
+    mae = F.l1_loss(output_ts, target_ts, reduction='none')
+    print((mae[mask]==0).sum())
+    mae = mae[mask].mean()
+    print(mae)
+    exit()
+    return mae
+
+
+def acc_d_info(output, target, mask, tokenizer):
+    acc = 0
+    return acc
+
+
+def mse_d_value(output, target, mask):
+    mse = 0
+    return mse
+
+
 class Metric:
     def __init__(self, metric_name, pivot, pivot_direction, pivot_name):
         self.pivot, self.pivot_name, self.pivot_direction = pivot, pivot_name, pivot_direction
@@ -53,14 +76,21 @@ class Metric:
             for m in metric_name[split]:
                 if m == 'Loss':
                     metric[split][m] = {'mode': 'batch', 'metric': (lambda input, output: output['loss'].item())}
-                elif m == 'Accuracy':
+                elif m == 'MAE-ar-time':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
-                                            lambda input, output: recur(Accuracy, output['target'], input['target']))}
-                elif m == 'RMSE':
+                                            lambda input, output: recur(mae_time, output['target'], input['data'],
+                                                                        input['mask']))}
+                elif m == 'Accuracy-ar-d~info':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
-                                            lambda input, output: recur(RMSE, output['target'], input['label']))}
+                                            lambda input, output: recur(acc_d_info, output['target'], input['data'],
+                                                                        input['mask'], input['tokenizer']))}
+                elif m == 'MSE-ar-d~value':
+                    metric[split][m] = {'mode': 'batch',
+                                        'metric': (
+                                            lambda input, output: recur(mse_d_value, output['target'], input['mask'],
+                                                                        input['data']))}
                 else:
                     raise ValueError('Not valid metric name')
         return metric
@@ -99,4 +129,3 @@ class Metric:
 
     def state_dict(self):
         return {'pivot': self.pivot, 'pivot_name': self.pivot_name, 'pivot_direction': self.pivot_direction}
-

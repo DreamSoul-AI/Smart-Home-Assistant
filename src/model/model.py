@@ -10,9 +10,9 @@ from config import cfg
 
 def make_model(model_name):
     model = eval('model.{}()'.format(model_name))
-    tokenizer = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
-                                      cache_folder=os.path.join('output', 'model'))
-    return model, tokenizer
+    encoder = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
+                                  cache_folder=os.path.join('output', 'model'))
+    return model, encoder
 
 
 def make_loss(output, input):

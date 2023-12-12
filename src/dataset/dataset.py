@@ -61,8 +61,8 @@ def make_dataset(data_name, encoder=None, verbose=True):
     elif data_name in ['SmartHome']:
         dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=['hh103'])
         dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=['hh103'])
-        dataset_['train'].transform = dataset.Compose([partial(encode, encoder)])
-        dataset_['test'].transform = dataset.Compose([partial(encode, encoder)])
+        dataset_['train'].transform = dataset.Compose([partial(tokenize, encoder)])
+        dataset_['test'].transform = dataset.Compose([partial(tokenize, encoder)])
     else:
         raise ValueError('Not valid dataset name')
     if verbose:
@@ -107,7 +107,7 @@ def collate(input):
             input[k] = pad_sequence(input[k], batch_first=True, padding_value=0.0)
         elif k in ['target', 'detect']:
             input[k] = torch.stack(input[k], 0)
-    input['mask'] = input['data'] != 0
+    input['mask'] = input['data'].sum(dim=-1) != 0
     return input
 
 
@@ -118,17 +118,17 @@ def process_dataset(dataset):
     return processed_dataset
 
 
-def encode(tokenizer, input):
+def tokenize(encoder, input):
     encoded_input = {'data': [], 'target': [], 'detect': []}
     data = input['data']
     ts = np.array(data['ts_normalized']).reshape(-1, 1)
     d_value = np.array(data['d_value']).reshape(-1, 1)
     d_name, d_func, d_type = data['d_name'].tolist(), data['d_func'].tolist(), data['d_type'].tolist()
-    d_str = []
+    d_info = []
     for j in range(len(d_name)):
-        d_str_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
-        d_str.append(d_str_i)
-    d_vec = tokenizer.encode(d_str)
+        d_info_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
+        d_info.append(d_info_i)
+    d_vec = encoder.encode(d_info)
     d_vec = np.concatenate([ts, d_vec, d_value], axis=-1)
     encoded_input['data'] = torch.tensor(d_vec).float()
     encoded_input['detect'] = torch.tensor(input['detect'])
@@ -137,11 +137,11 @@ def encode(tokenizer, input):
         ts = np.array(data['ts_normalized']).reshape(-1, 1)
         d_value = np.array(data['d_value']).reshape(-1, 1)
         d_name, d_func, d_type = target['d_name'].tolist(), target['d_func'].tolist(), target['d_type'].tolist()
-        d_str = []
+        d_info = []
         for j in range(len(d_name)):
-            d_str_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
-            d_str.append(d_str_i)
-        d_vec = tokenizer.encode(d_str)
+            d_info_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
+            d_info.append(d_info_i)
+        d_vec = encoder.encode(d_info)
         d_vec = np.concatenate([ts, d_vec, d_value], axis=-1)
         encoded_input['target'] = torch.tensor(d_vec).float()
     else:
