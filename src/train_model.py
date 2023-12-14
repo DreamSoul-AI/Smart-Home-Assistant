@@ -8,7 +8,7 @@ import torch.backends.cudnn as cudnn
 from config import cfg, process_args
 from dataset import make_dataset, make_data_loader, process_dataset, collate
 from metric import make_metric, make_logger
-from model import make_model, make_tokenizer, make_optimizer, make_scheduler
+from model import make_model, make_optimizer, make_scheduler, make_vec_lib, query_vec_lib
 from module import save, to_device, process_control, resume, makedir_exist_ok
 
 cudnn.benchmark = True
@@ -42,6 +42,14 @@ def runExperiment():
     model, tokenizer = make_model(cfg['model_name'])
     model = model.to(cfg['device'])
     tokenizer.encoder = tokenizer.encoder.to(cfg['device'])
+    # ---------------------------------------------------------------------------------------------
+    make_vec_lib(os.path.join('data', 'SmartHome', 'raw', 'hh103', 'env.csv'), encoder)
+    # text = 'Name: MA 7, Function: amb, Info: s sor'
+    # query_vec = encoder.encode(text)
+    # print(query_vec)
+    # print(query_vec_lib(query_vec))
+    # exit()
+    # ---------------------------------------------------------------------------------------------
     dataset = make_dataset(cfg['data_name'], tokenizer)
     dataset = process_dataset(dataset)
     data_loader = make_data_loader(dataset, cfg['model_name'])
