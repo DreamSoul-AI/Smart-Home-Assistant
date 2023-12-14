@@ -8,9 +8,9 @@ from config import cfg
 
 
 def make_model(model_name):
-    model = eval('model.{}()'.format(model_name))
-    tokenizer = model.tokenizer()
-    return model, tokenizer
+    model_ = eval('model.{}()'.format(model_name))
+    tokenizer = model.Tokenizer()
+    return model_, tokenizer
 
 
 def make_loss(output, input):

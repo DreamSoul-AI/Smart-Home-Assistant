@@ -50,7 +50,7 @@ def runExperiment():
     result = resume(os.path.join(checkpoint_path, 'model'), resume_mode=cfg['resume_mode'])
     if result is None:
         cfg['epoch'] = 1
-        tokenizer = make_tokenizer(data_loader['train'])
+        # tokenizer = make_tokenizer(data_loader['train'])
         optimizer = make_optimizer(model.parameters(), cfg['model_name'])
         scheduler = make_scheduler(optimizer, cfg['model_name'])
     else:
@@ -66,7 +66,7 @@ def runExperiment():
     for epoch in range(cfg['epoch'], cfg[cfg['model_name']]['num_epochs'] + 1):
         cfg['epoch'] = epoch
         train(data_loader['train'], model, tokenizer, optimizer, scheduler, metric, logger)
-        test(data_loader['test'], model, metric, logger)
+        test(data_loader['test'], model, tokenizer, metric, logger)
         result = {'cfg': cfg, 'epoch': cfg['epoch'] + 1, 'model_state_dict': model.state_dict(),
                   'optimizer_state_dict': optimizer.state_dict(), 'scheduler_state_dict': scheduler.state_dict(),
                   'metric_state_dict': metric.state_dict(), 'logger_state_dict': logger.state_dict(),
@@ -85,6 +85,7 @@ def train(data_loader, model, tokenizer, optimizer, scheduler, metric, logger):
     model.train(True)
     start_time = time.time()
     for i, input in enumerate(data_loader):
+        print(i)
         input = collate(input)
         input_size = input['data'].size(0)
         input = to_device(input, cfg['device'])
@@ -112,7 +113,7 @@ def train(data_loader, model, tokenizer, optimizer, scheduler, metric, logger):
     return
 
 
-def test(data_loader, model, metric, logger):
+def test(data_loader, model, tokenizer, metric, logger):
     with torch.no_grad():
         model.train(False)
         for i, input in enumerate(data_loader):
@@ -120,6 +121,7 @@ def test(data_loader, model, metric, logger):
             input_size = input['data'].size(0)
             input = to_device(input, cfg['device'])
             output = model(input)
+            input['tokenizer'] = tokenizer
             evaluation = metric.evaluate('test', 'batch', input, output)
             logger.append(evaluation, 'test', input_size)
         evaluation = metric.evaluate('test', 'full')

@@ -55,6 +55,7 @@ def acc_d_info(output, target, mask, tokenizer):
     info_size = cfg['embedding_size'] - 2
     output_d_info = output[:, :-1, :info_size][mask]
     target_d_info = target[:, 1:, :info_size][mask]
+    exit()
     # output_d_info = output_d_info.view(-1, info_size)
     # target_d_info = target_d_info.view(-1, info_size)
     acc = 0
@@ -85,7 +86,7 @@ class Metric:
                 elif m == 'Accuracy-ar-d~info':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
-                                            lambda input, output: recur(acc_d_info, output['target'], input['data'],
+                                            lambda input, output: recur(acc_d_info, output['target'], input['info'],
                                                                         input['mask'], input['tokenizer']))}
                 elif m == 'MAE-ar-time':
                     metric[split][m] = {'mode': 'batch',

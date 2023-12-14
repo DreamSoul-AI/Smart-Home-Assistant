@@ -16,11 +16,11 @@ def ntuple(n):
 def recur(fn, input, *args):
     if isinstance(input, torch.Tensor) or isinstance(input, np.ndarray):
         output = fn(input, *args)
-    elif isinstance(input, Sequence):
+    elif isinstance(input, list):
         output = []
         for i in range(len(input)):
             output.append(recur(fn, input[i], *args))
-    elif isinstance(input, Mapping):
+    elif isinstance(input, dict):
         output = {}
         for key in input:
             output[key] = recur(fn, input[key], *args)

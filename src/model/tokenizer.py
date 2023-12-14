@@ -22,7 +22,7 @@ class Tokenizer:
 
     def tokenize(self, input):
         with torch.no_grad():
-            tokenized_input = {'data': [], 'target': [], 'detect': []}
+            tokenized_input = {'info': None, 'data': None, 'target': None, 'detect': None}
             data = input['data']
             ts = np.array(data['ts_normalized']).reshape(-1, 1)
             d_value = np.array(data['d_value']).reshape(-1, 1)
@@ -31,8 +31,10 @@ class Tokenizer:
             for j in range(len(d_name)):
                 d_info_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
                 d_info.append(d_info_i)
+            tokenized_input['info'] = d_info
             d_vec = self.encoder.encode(d_info)
-            self.update(d_info, d_vec)
+            for i in range(len(d_info)):
+                self.update(d_info[i], d_vec[i])
             d_vec = np.concatenate([d_vec, d_value, ts], axis=-1)
             tokenized_input['data'] = torch.tensor(d_vec).float()
             tokenized_input['detect'] = torch.tensor(input['detect'])
