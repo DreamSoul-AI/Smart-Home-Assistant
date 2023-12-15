@@ -5,4 +5,5 @@ from .cnn import *
 from .resnet import *
 from .wresnet import *
 from .lstm import *
+from .base import *
 from .tokenizer import *

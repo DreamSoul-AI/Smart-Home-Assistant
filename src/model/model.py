@@ -6,48 +6,10 @@ import torch.optim as optim
 import model
 from config import cfg
 
-# ------------------------------------------------------------------------------------------------------
-import numpy as np
-import pandas as pd
-
-
-def make_vec_lib(data_path, tokenizer):
-
-    env_data = pd.read_csv(data_path, delimiter=',')
-    env_data = env_data[(env_data['d_type'] != 'room') & (env_data['d_type'] != 'house')]
-    env_data = env_data[['d_name', 'd_func', 'd_type']]
-    env_data = env_data.reset_index()
-    d_name, d_func, d_type = env_data['d_name'], env_data['d_func'], env_data['d_type']
-    env_str_list = []
-    for i in range(len(env_data)):
-        device_j = 'Name: {}, Function: {}, Info: {}'.format(d_name[i], d_func[i], d_type[i])
-        env_str_list.append(device_j)
-    vec_lib = tokenizer.encode(env_str_list)  # vectors_lib
-    env_str_array = np.array(env_str_list)
-    if not os.path.exists(os.path.join('output', 'vec_lib')):
-        os.makedirs(os.path.join('output', 'vec_lib'))
-    np.save(os.path.join('output', 'vec_lib', 'vec_lib.npy'), vec_lib)
-    np.save(os.path.join('output', 'vec_lib', 'env_str_array.npy'), env_str_array)
-    return
-
-
-def query_vec_lib(query_vector):
-    vec_lib = np.load(os.path.join('output', 'vec_lib', 'vec_lib.npy'))
-    env_str_list = np.load(os.path.join('output', 'vec_lib', 'env_str_array.npy')).tolist()
-    similarities = np.dot(query_vector, np.transpose(vec_lib))
-    most_similar_index = np.argmax(similarities)
-    most_similar_sentence = env_str_list[most_similar_index]
-    return most_similar_sentence
-
-
-# ------------------------------------------------------------------------------------------------------
-
-
 
 def make_model(model_name):
-    model_ = eval('model.{}()'.format(model_name))
-    tokenizer = model.Tokenizer()
-    return model_, tokenizer
+    model = eval('model.{}()'.format(model_name))
+    return model
 
 
 def make_loss(output, input):

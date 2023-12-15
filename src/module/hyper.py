@@ -16,11 +16,14 @@ def process_control():
     cfg['wresnet28x2'] = {'depth': 28, 'widen_factor': 2, 'drop_rate': 0.0}
     cfg['wresnet28x8'] = {'depth': 28, 'widen_factor': 8, 'drop_rate': 0.0}
     cfg['lstm'] = {'hidden_size': 128, 'num_layers': 2}
+
+    cfg['base_model_name'] = 'ar'
     cfg['data_name'] = cfg['control']['data_name']
     cfg['data_shape'] = data_shape[cfg['data_name']]
     cfg['model_name'] = cfg['control']['model_name']
     cfg['target_size'] = cfg['data_shape'][0]
     model_name = cfg['model_name']
+    cfg['model'] = {'model_name': model_name}
     cfg[model_name]['shuffle'] = {'train': True, 'test': False}
     cfg[model_name]['optimizer_name'] = 'Adam'
     cfg[model_name]['lr'] = 1e-3
@@ -31,4 +34,7 @@ def process_control():
     cfg[model_name]['scheduler_name'] = 'CosineAnnealingLR'
     cfg[model_name]['num_epochs'] = 100
     cfg[model_name]['batch_size'] = {'train': 250, 'test': 250}
+    cfg['encoder'] = {'embedding_size': cfg['embedding_size']}
+    cfg['core'] = {'data_shape': cfg['data_shape']}
+    cfg['decoder'] = {'embedding_size': cfg['embedding_size']}
     return
