@@ -7,6 +7,12 @@ import model
 from config import cfg
 
 
+def make_tokenizer():
+    tokenizer = model.Tokenizer()
+    cfg['num_embedding'] = len(tokenizer.vocab)
+    return tokenizer
+
+
 def make_model(model_name):
     model = eval('model.{}()'.format(model_name))
     return model
@@ -69,12 +75,6 @@ def make_batchnorm(m, momentum, track_running_stats):
             m.running_var = None
             m.num_batches_tracked = None
     return m
-
-
-def make_tokenizer(data_loader):
-    for i, input in enumerate(data_loader):
-        pass
-    return
 
 
 def make_optimizer(parameters, tag):

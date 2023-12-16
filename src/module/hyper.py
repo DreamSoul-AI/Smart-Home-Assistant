@@ -2,7 +2,7 @@ from config import cfg
 
 
 def process_control():
-    cfg['collate_mode'] = 'dict'
+    cfg['collate_mode'] = 'transformer'
     cfg['embedding_size'] = 768 + 2
     cfg['max_length'] = 128
     data_shape = {'MNIST': [1, 28, 28], 'FashionMNIST': [1, 28, 28], 'SVHN': [3, 32, 32], 'CIFAR10': [3, 32, 32],

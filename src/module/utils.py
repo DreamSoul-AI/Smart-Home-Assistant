@@ -31,3 +31,8 @@ def recur(fn, input, *args):
     else:
         raise ValueError('Not valid input type')
     return output
+
+
+def to_device(input, device):
+    output = recur(lambda x, y: x.to(y), input, device)
+    return output

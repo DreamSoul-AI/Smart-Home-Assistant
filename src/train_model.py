@@ -8,7 +8,7 @@ import torch.backends.cudnn as cudnn
 from config import cfg, process_args
 from dataset import make_dataset, make_data_loader, process_dataset, collate
 from metric import make_metric, make_logger
-from model import make_model, make_optimizer, make_scheduler
+from model import make_model, make_tokenizer, make_optimizer, make_scheduler
 from module import save, to_device, process_control, resume, makedir_exist_ok
 
 cudnn.benchmark = True
@@ -22,8 +22,8 @@ process_args(args)
 
 def main():
     process_control()
-    seeds = list(range(cfg['init_seed'], cfg['init_seed'] + cfg['num_experiments']))
-    for i in range(cfg['num_experiments']):
+    seeds = list(range(cfg['init_seed'], cfg['init_seed'] + cfg['num_experiment']))
+    for i in range(cfg['num_experiment']):
         model_tag_list = [str(seeds[i]), cfg['control_name']]
         cfg['model_tag'] = '_'.join([x for x in model_tag_list if x])
         print('Experiment: {}'.format(cfg['model_tag']))
@@ -39,10 +39,14 @@ def runExperiment():
     model_tag_path = os.path.join(model_path, cfg['model_tag'])
     checkpoint_path = os.path.join(model_tag_path, 'checkpoint')
     best_path = os.path.join(model_tag_path, 'best')
+    tokenizer_path = os.path.join(model_tag_path, 'tokenizer')
+    tokenizer = make_tokenizer()
+    result = resume(os.path.join(tokenizer_path, 'model'))
+    tokenizer.load_state_dict(result['tokenizer_state_dict'])
     model = make_model('base')
     model = model.to(cfg['device'])
-    dataset = make_dataset(cfg['data_name'], model.tokenizer)
-    dataset = process_dataset(dataset)
+    dataset = make_dataset(cfg['data_name'])
+    dataset = process_dataset(dataset, tokenizer)
     data_loader = make_data_loader(dataset, cfg['model_name'])
     metric = make_metric({'train': ['Loss'], 'test': ['Loss']})
     logger = make_logger(os.path.join('output', 'runs', 'train_{}'.format(cfg['model_tag'])))
@@ -82,8 +86,9 @@ def train(data_loader, model, optimizer, scheduler, metric, logger):
     start_time = time.time()
     for i, input in enumerate(data_loader):
         print(i)
-        exit()
         input = collate(input)
+        print(input)
+        exit()
         input_size = input['data'].size(0)
         input = to_device(input, cfg['device'])
         output = model(input)

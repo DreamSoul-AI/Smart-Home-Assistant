@@ -9,9 +9,10 @@ from sentence_transformers import SentenceTransformer
 
 
 class Encoder:
-    def __init__(self, tokenzier):
+    def __init__(self, num_embedding, embedding_size):
         super().__init__()
-        self.tokenzier = tokenzier
+        self.num_embedding = num_embedding
+        self.embedding_size = embedding_size
         self.encoder = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
                                            cache_folder=os.path.join('output', 'model'))
 
@@ -58,10 +59,9 @@ class Encoder:
 
 
 class Base(nn.Module):
-    def __init__(self, hidden_size, embedding_size):
+    def __init__(self, num_embedding, hidden_size, embedding_size):
         super().__init__()
-        self.tokenizer = Tokenizer()
-        # self.encoder = Encoder(self.tokenzier)
+        self.encoder = Encoder(num_embedding, embedding_size)
         self.core = make_model(cfg['model_name'])
         self.decoder = nn.Linear(hidden_size, embedding_size)
 
@@ -93,8 +93,9 @@ class Base(nn.Module):
 
 
 def base():
+    num_embedding = cfg['num_embedding']
     embedding_size = cfg['embedding_size']
     hidden_size = cfg[cfg['model_name']]['hidden_size']
-    model = Base(embedding_size, hidden_size)
+    model = Base(num_embedding, embedding_size, hidden_size)
     model.apply(init_param)
     return model
