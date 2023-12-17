@@ -109,36 +109,12 @@ def collate(input):
 def process_dataset(dataset, tokenizer):
     max_length = cfg['max_length']
 
-    def preprocess_(data, pad_width):
-        pad_width = (0, pad_width)
-        data = tokenizer(data)
-        ts = np.array(data['ts_normalized'])
-        d_value = np.array(data['d_value'])
-        d_info = np.array(data['d_info'])
-        ts = np.pad(ts, pad_width, mode='constant', constant_values=0)
-        d_value = np.pad(d_value, pad_width, mode='constant', constant_values=0)
-        d_info = np.pad(d_info, pad_width, mode='constant', constant_values=tokenizer.pad_token)
-        ts = torch.tensor(ts, dtype=torch.float)
-        d_value = torch.tensor(d_value, dtype=torch.float)
-        d_info = torch.tensor(d_info, dtype=torch.float)
-        processed_data = torch.stack([ts, d_value, d_info], dim=-1)
-        return processed_data
-
     def preprocess_function(examples):
-        batch_size = len(examples['data'])
-        model_inputs = {'data': [], 'target': [], 'attention_mask': []}
-        for i in range(batch_size):
-            data = examples['data'][i]
-            target = examples['target'][i]
-            org_width = len(data['ts'])
-            pad_width = max(0, max_length - org_width) # need truncation
-            data = preprocess_(data, pad_width)
-            target = preprocess_(target, 0)
-            attention_mask = np.concatenate([np.ones(org_width, dtype=bool), np.zeros(pad_width, dtype=bool)], axis=0)
-            attention_mask = torch.tensor(attention_mask)
-            model_inputs['data'].append(data)
-            model_inputs['target'].append(target)
-            model_inputs['attention_mask'].append(attention_mask)
+        data = examples['data']
+        target = examples['target']
+        data = tokenizer(data, max_length=max_length, padding=True, truncation=True)
+        target = tokenizer(target, max_length=1, padding=True, truncation=True)
+        model_inputs = {'data': data['data'], 'attention_mask': data['attention_mask'], 'target': target['data']}
         return model_inputs
 
     processed_dataset = {}

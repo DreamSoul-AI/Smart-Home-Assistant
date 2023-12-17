@@ -40,7 +40,7 @@ def runExperiment():
     if result is not None:
         tokenizer.load_state_dict(result['tokenizer_state_dict'])
     train(dataset['train'], tokenizer)
-    result = {'cfg': cfg, 'tokenizer_state_dict': tokenizer.state_dict()}
+    result = {'cfg': cfg, 'tokenizer': tokenizer}
     save(result, os.path.join(tokenizer_path, 'model'))
     return
 
