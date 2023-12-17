@@ -9,7 +9,6 @@ from config import cfg
 
 def make_tokenizer():
     tokenizer = model.Tokenizer()
-    cfg['num_embedding'] = len(tokenizer.vocab)
     return tokenizer
 
 

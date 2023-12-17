@@ -8,7 +8,7 @@ import torch.backends.cudnn as cudnn
 from config import cfg, process_args
 from dataset import make_dataset, make_data_loader, process_dataset, collate
 from metric import make_metric, make_logger
-from model import make_model, make_tokenizer, make_optimizer, make_scheduler
+from model import base, make_model, make_tokenizer, make_optimizer, make_scheduler
 from module import save, to_device, process_control, resume, makedir_exist_ok
 
 cudnn.benchmark = True
@@ -39,11 +39,9 @@ def runExperiment():
     model_tag_path = os.path.join(model_path, cfg['model_tag'])
     checkpoint_path = os.path.join(model_tag_path, 'checkpoint')
     best_path = os.path.join(model_tag_path, 'best')
-    tokenizer_path = os.path.join(model_tag_path, 'tokenizer')
-    tokenizer = make_tokenizer()
-    result = resume(os.path.join(tokenizer_path, 'model'))
-    tokenizer.load_state_dict(result['tokenizer_state_dict'])
-    model = make_model('base')
+    tokenizer_path = os.path.join('output', 'tokenizer')
+    tokenizer = resume(os.path.join(tokenizer_path, cfg['data_name']))
+    model = base(tokenizer)
     model = model.to(cfg['device'])
     dataset = make_dataset(cfg['data_name'])
     dataset = process_dataset(dataset, tokenizer)

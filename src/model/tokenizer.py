@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 
+
 class Tokenizer:
     def __init__(self, unk_token='[UNK]', pad_token='[PAD]', cls_token='[CLS]', sep_token='[SEP]', if_train=False):
         super().__init__()
@@ -11,7 +12,7 @@ class Tokenizer:
         self.cls_token = cls_token
         self.sep_token = sep_token
         self.if_train = if_train
-        self.pad_direction = 'right'
+        self.padding_direction = 'right'
         self.special_token = [self.unk_token, self.pad_token, self.cls_token, self.sep_token]
         for i in range(len(self.special_token)):
             self.update(self.special_token[i])
@@ -26,33 +27,52 @@ class Tokenizer:
         self.if_train = if_train
         return
 
-    def __call__(self, data, padding=False, truncation=False, max_length=None, return_tensors='np'):
-        ts = data['ts_normalized']
-        d_value = data['d_value']
-        d_info = self.tokenize(data)
-        seq_len = len(d_info)
-        d_info = [self.convert_token_to_id(d_info[i]) for i in range(len(d_info))]
-        if truncation and max_length is not None and max_length < seq_len:
-            ts = ts[:max_length]
-            d_value = d_value[:max_length]
-            d_info = d_info[:max_length]
-        seq_len = len(d_info)
-        if padding and max_length is not None and max_length > seq_len:
-            pad_width = max_length - seq_len
-            ts = np.pad(ts, (0, pad_width), mode='constant', constant_values=0)
-            d_value = np.pad(d_value, (0, pad_width), mode='constant', constant_values=0)
-
-
-
-
-
-
-
-        ts = torch.tensor(ts, dtype=torch.float)
-        d_value = torch.tensor(d_value, dtype=torch.float)
-        d_info = torch.tensor(d_info, dtype=torch.float)
-        data = torch.stack([ts, d_value, d_info], dim=-1)
-        return data
+    def __call__(self, input, padding=False, truncation=False, max_length=None, return_tensors='pt'):
+        seq_len = [len(input[i]['d_value']) for i in range(len(input))]
+        if max_length == 'longest':
+            max_length = max(seq_len)
+        data = []
+        attention_mask = []
+        for i in range(len(input)):
+            input_i = input[i]
+            ts_i = input_i['ts_normalized']
+            d_value_i = input_i['d_value']
+            d_info_i = self.tokenize(input_i)
+            d_info_i = [self.convert_token_to_id(d_info_i[j]) for j in range(len(d_info_i))]
+            if truncation and max_length is not None and max_length < seq_len[i]:
+                ts_i = ts_i[:max_length]
+                d_value_i = d_value_i[:max_length]
+                d_info_i = d_info_i[:max_length]
+                seq_len[i] = len(d_value_i)
+            if padding and max_length is not None and max_length > seq_len[i]:
+                pad_width = max_length - seq_len[i]
+                if self.padding_direction == 'right':
+                    ts_i = np.pad(ts_i, (0, pad_width), mode='constant', constant_values=0).tolist()
+                    d_value_i = np.pad(d_value_i, (0, pad_width), mode='constant', constant_values=0).tolist()
+                    d_info_i = np.pad(d_info_i, (0, pad_width), mode='constant',
+                                    constant_values=self.convert_token_to_id(self.pad_token)).tolist()
+                    attention_mask_i = [1] * seq_len[i] + [0] * pad_width
+                elif self.padding_direction == 'left':
+                    ts_i = np.pad(ts_i, (pad_width, 0), mode='constant', constant_values=0).tolist()
+                    d_value_i = np.pad(d_value_i, (pad_width, 0), mode='constant', constant_values=0).tolist()
+                    d_info_i = np.pad(d_info_i, (pad_width, 0), mode='constant',
+                                    constant_values=self.convert_token_to_id(self.pad_token)).tolist()
+                    attention_mask_i = [0] * pad_width + [1] * seq_len[i]
+                else:
+                    raise ValueError('Not valid padding direction')
+            else:
+                attention_mask_i = [1] * seq_len[i]
+            data_i = np.array([ts_i, d_value_i, d_info_i]).transpose().tolist()
+            data.append(data_i)
+            attention_mask.append(attention_mask_i)
+        if return_tensors == 'np':
+            data = np.array(data, dtype=np.float32)
+            attention_mask = np.array(attention_mask)
+        if return_tensors == 'pt':
+            data = torch.tensor(data, dtype=torch.float32)
+            attention_mask = torch.tensor(attention_mask)
+        output = {'data': data, 'attention_mask': attention_mask}
+        return output
 
     def tokenize(self, data):
         d_name, d_func, d_type = list(data['d_name']), list(data['d_func']), list(data['d_type'])

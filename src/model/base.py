@@ -9,9 +9,9 @@ from sentence_transformers import SentenceTransformer
 
 
 class Encoder:
-    def __init__(self, num_embedding, embedding_size):
+    def __init__(self, tokenizer, embedding_size):
         super().__init__()
-        self.num_embedding = num_embedding
+        self.tokenizer = tokenizer
         self.embedding_size = embedding_size
         self.encoder = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
                                            cache_folder=os.path.join('output', 'model'))
@@ -92,10 +92,9 @@ class Base(nn.Module):
         return output
 
 
-def base():
-    num_embedding = cfg['num_embedding']
+def base(tokenizer):
     embedding_size = cfg['embedding_size']
     hidden_size = cfg[cfg['model_name']]['hidden_size']
-    model = Base(num_embedding, embedding_size, hidden_size)
+    model = Base(tokenizer, embedding_size)
     model.apply(init_param)
     return model

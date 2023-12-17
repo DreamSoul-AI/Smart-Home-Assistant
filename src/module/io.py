@@ -57,7 +57,7 @@ def save_img(img, path, nrow=10, padding=1, pad_value=0, value_range=None):
 def resume(path, verbose=True, resume_mode=1):
     if os.path.exists(path) and resume_mode == 1:
         result = load(path)
-        if verbose and 'epoch' in result:
+        if verbose and isinstance(result, dict) and 'epoch' in result:
             print('Resume from {}'.format(result['epoch']))
     else:
         if resume_mode == 1:
