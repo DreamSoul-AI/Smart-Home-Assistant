@@ -10,7 +10,7 @@ def process_control():
     cfg['linear'] = {}
     cfg['mlp'] = {'hidden_size': 128, 'scale_factor': 2, 'num_layers': 2, 'activation': 'relu'}
     cfg['cnn'] = {'hidden_size': [64, 128, 256, 512]}
-    cfg['lstm'] = {'hidden_size': 128, 'num_layers': 2}
+    cfg['lstm'] = {'hidden_size': 256, 'num_layers': 2}
     cfg['resnet9'] = {'hidden_size': [64, 128, 256, 512]}
     cfg['resnet18'] = {'hidden_size': [64, 128, 256, 512]}
     cfg['wresnet28x2'] = {'depth': 28, 'widen_factor': 2, 'drop_rate': 0.0}

@@ -67,10 +67,10 @@ class Tokenizer:
             attention_mask.append(attention_mask_i)
         if return_tensors == 'np':
             data = np.array(data, dtype=np.float32)
-            attention_mask = np.array(attention_mask)
+            attention_mask = np.array(attention_mask, dtype=bool)
         if return_tensors == 'pt':
             data = torch.tensor(data, dtype=torch.float32)
-            attention_mask = torch.tensor(attention_mask)
+            attention_mask = torch.tensor(attention_mask, dtype=torch.bool)
         output = {'data': data, 'attention_mask': attention_mask}
         return output
 
