@@ -17,7 +17,7 @@ def make_metric(metric_name):
         pivot_direction = 'down'
         pivot_name = 'Loss'
         for k in metric_name:
-            metric_name[k].extend(['Accuracy-ar-d~info', 'MAE-ar-d~value', 'MAE-ar-time'])
+            metric_name[k].extend(['MAE-ar-d~value', 'MAE-ar-time', 'Accuracy-ar-d~info'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, pivot, pivot_direction, pivot_name)
@@ -41,34 +41,25 @@ def RMSE(output, target):
     return rmse
 
 
-def mae_time(output, target, mask):
-    mask = mask[:, 1:]
-    output_ts = output[:, :-1, -1][mask]
-    target_ts = target[:, 1:, -1][mask]
-    mae = F.l1_loss(output_ts, target_ts, reduction='mean')
-    mae = mae.item()
+def mae_ts(output, target, mask):
+    output_ts = output[:, 0]
+    target_ts = target[:, 1:, 0][mask[:, 1:]]
+    mae = F.l1_loss(output_ts, target_ts, reduction='mean').item()
     return mae
-
-
-def acc_d_info(output, target, mask, tokenizer):
-    mask = mask[:, 1:]
-    info_size = cfg['embedding_size'] - 2
-    output_d_info = output[:, :-1, :info_size][mask]
-    target_d_info = target[:, 1:, :info_size][mask]
-    exit()
-    # output_d_info = output_d_info.view(-1, info_size)
-    # target_d_info = target_d_info.view(-1, info_size)
-    acc = 0
-    return acc
 
 
 def mae_d_value(output, target, mask):
-    mask = mask[:, 1:]
-    output_d_value = output[:, :-1, -2][mask]
-    target_d_value = target[:, 1:, -2][mask]
-    mae = F.l1_loss(output_d_value, target_d_value, reduction='mean')
-    mae = mae.item()
+    output_d_value = output[:, 1]
+    target_d_value = target[:, 1:, 1][mask[:, 1:]]
+    mae = F.l1_loss(output_d_value, target_d_value, reduction='mean').item()
     return mae
+
+
+def acc_d_info(output, target, mask):
+    output_d_info = output[:, 2]
+    target_d_info = target[:, 1:, 2][mask[:, 1:]]
+    acc = (output_d_info == target_d_info).float().mean().item()
+    return acc
 
 
 class Metric:
@@ -83,21 +74,21 @@ class Metric:
             for m in metric_name[split]:
                 if m == 'Loss':
                     metric[split][m] = {'mode': 'batch', 'metric': (lambda input, output: output['loss'].item())}
-                elif m == 'Accuracy-ar-d~info':
-                    metric[split][m] = {'mode': 'batch',
-                                        'metric': (
-                                            lambda input, output: recur(acc_d_info, output['target'], input['info'],
-                                                                        input['mask'], input['tokenizer']))}
                 elif m == 'MAE-ar-time':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
-                                            lambda input, output: recur(mae_time, output['target'], input['data'],
-                                                                        input['mask']))}
+                                            lambda input, output: recur(mae_ts, output['target'], input['data'],
+                                                                        input['attention_mask']))}
                 elif m == 'MAE-ar-d~value':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
                                             lambda input, output: recur(mae_d_value, output['target'], input['data'],
-                                                                        input['mask']))}
+                                                                        input['attention_mask']))}
+                elif m == 'Accuracy-ar-d~info':
+                    metric[split][m] = {'mode': 'batch',
+                                        'metric': (
+                                            lambda input, output: recur(acc_d_info, output['target'], input['data'],
+                                                                        input['attention_mask']))}
                 else:
                     raise ValueError('Not valid metric name')
         return metric

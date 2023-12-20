@@ -87,7 +87,7 @@ def train(data_loader, model, optimizer, scheduler, metric, logger):
         input = to_device(input, cfg['device'])
         output = model(input)
         output['loss'].backward()
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
         optimizer.zero_grad()
         evaluation = metric.evaluate('train', 'batch', input, output)
@@ -112,7 +112,6 @@ def test(data_loader, model, metric, logger):
     with torch.no_grad():
         model.train(False)
         for i, input in enumerate(data_loader):
-            input = collate(input)
             input_size = input['data'].size(0)
             input = to_device(input, cfg['device'])
             output = model(input)

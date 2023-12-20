@@ -48,7 +48,7 @@ class Base(nn.Module):
     def forward(self, input):
         output = {}
         x_target = input['data'][..., :2]
-        x_info_target = input['data'][..., -1].long()
+        x_info_target = input['data'][..., 2].long()
         mask = input['attention_mask'][:, 1:]
         x_info = self.embedding(x_info_target)
         x = torch.cat([x_target, x_info], dim=-1)
@@ -63,14 +63,13 @@ class Base(nn.Module):
         x_value_target = x_target[..., 1]
         x_info_target = x_info_target[:, 1:]
 
-        x_ts = torch.masked_select(x_ts, mask)
-        x_ts_target = torch.masked_select(x_ts_target, mask)
-        x_value = torch.masked_select(x_value, mask)
-        x_value_target = torch.masked_select(x_value_target, mask)
+        x_ts = x_ts[mask]
+        x_ts_target = x_ts_target[mask]
+        x_value = x_value[mask]
+        x_value_target = x_value_target[mask]
 
         x_info = x_info.transpose(1, 2)
-        x_info_target[mask] = -100
-
+        x_info_target[~mask] = -100
         num_loss = mask.float().sum()
         mse_loss_ts = F.mse_loss(x_ts, x_ts_target, reduction='sum') / num_loss
         mse_loss_value = F.mse_loss(x_value, x_value_target, reduction='sum') / num_loss
