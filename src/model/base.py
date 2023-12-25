@@ -16,7 +16,7 @@ class Base(nn.Module):
         self.text_encoder = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
                                                 cache_folder=os.path.join('output', 'model'))
         self.info_embedding = self.make_info_embedding()
-        self.encoder = nn.Linear(embedding_size + 1, hidden_size) # ts_start  +1
+        self.encoder = nn.Linear(embedding_size + 1, hidden_size)  # ts_start  +1
         self.core = nn.LSTM(hidden_size, hidden_size, num_layers=num_layers, bias=True, batch_first=True,
                             dropout=0.0, bidirectional=False)
         self.decoder = nn.Linear(hidden_size, embedding_size)
@@ -51,6 +51,7 @@ class Base(nn.Module):
         mask = input['attention_mask'][:, 1:]
 
         x_info = self.info_embedding(x_info_target)
+        x_info = x_info / torch.linalg.norm(x_info, dim=-1, keepdim=True)
         x = torch.cat([x_target, x_info], dim=-1)
 
         x = self.encode(x)
