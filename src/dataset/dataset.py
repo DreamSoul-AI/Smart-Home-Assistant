@@ -108,12 +108,15 @@ def collate(input):
 
 def process_dataset(dataset, tokenizer):
     max_length = cfg['max_length']
+    window_length = dataset['train'].seq_len
 
     def preprocess_function(examples):
         data = examples['data']
         target = examples['target']
-        data = tokenizer(data, max_length=max_length, padding=True, truncation=True, return_tensors='pt')
-        target = tokenizer(target, max_length=1, padding=True, truncation=True, return_tensors='pt')
+        data = tokenizer(data, window_length=window_length, max_length=max_length, padding=True, truncation=True,
+                         return_tensors='pt')
+        target = tokenizer(target, window_length=window_length, max_length=1, padding=True, truncation=True,
+                           return_tensors='pt')
         model_inputs = {'data': data['data'], 'attention_mask': data['attention_mask'], 'target': target['data']}
         return model_inputs
 

@@ -17,6 +17,18 @@ class Tokenizer:
         for i in range(len(self.special_token)):
             self.update(self.special_token[i])
 
+    @property
+    def normalization(self):
+        # Constants
+        days_per_year = 365
+        hours_per_day = 24
+        minutes_per_hour = 60
+        seconds_per_minute = 60
+
+        # Calculation
+        seconds_per_year = days_per_year * hours_per_day * minutes_per_hour * seconds_per_minute
+        return seconds_per_year
+
     def update(self, token):
         if token not in self.vocab:
             self.vocab[token] = len(self.vocab)
@@ -27,8 +39,9 @@ class Tokenizer:
         self.if_train = if_train
         return
 
-    def __call__(self, input, padding=False, truncation=False, max_length=None, return_tensors='pt'):
+    def __call__(self, input, window_length, max_length=None, padding=False, truncation=False, return_tensors='pt'):
         seq_len = [len(input[i]['d_value']) for i in range(len(input))]
+        window_length = window_length / self.normalization
         if max_length == 'longest':
             max_length = max(seq_len)
         data = []
@@ -36,10 +49,17 @@ class Tokenizer:
         for i in range(len(input)):
             input_i = input[i]
             ts_i = input_i['ts_normalized']
+            if len(ts_i) > 0:
+                ts_start_i = ts_i[0]
+                ts_i = [0] + (np.diff(ts_i) / window_length).tolist()
+                ts_start_i = [ts_start_i] * len(ts_i)
+            else:
+                ts_start_i = []
             d_value_i = input_i['d_value']
             d_info_i = self.tokenize(input_i)
             d_info_i = [self.convert_token_to_id(d_info_i[j]) for j in range(len(d_info_i))]
             if truncation and max_length is not None and max_length < seq_len[i]:
+                ts_start_i = ts_start_i[:max_length]
                 ts_i = ts_i[:max_length]
                 d_value_i = d_value_i[:max_length]
                 d_info_i = d_info_i[:max_length]
@@ -47,22 +67,24 @@ class Tokenizer:
             if padding and max_length is not None and max_length > seq_len[i]:
                 pad_width = max_length - seq_len[i]
                 if self.padding_direction == 'right':
+                    ts_start_i = np.pad(ts_start_i, (0, pad_width), mode='constant', constant_values=0).tolist()
                     ts_i = np.pad(ts_i, (0, pad_width), mode='constant', constant_values=0).tolist()
                     d_value_i = np.pad(d_value_i, (0, pad_width), mode='constant', constant_values=0).tolist()
                     d_info_i = np.pad(d_info_i, (0, pad_width), mode='constant',
-                                    constant_values=self.convert_token_to_id(self.pad_token)).tolist()
+                                      constant_values=self.convert_token_to_id(self.pad_token)).tolist()
                     attention_mask_i = [1] * seq_len[i] + [0] * pad_width
                 elif self.padding_direction == 'left':
+                    ts_start_i = np.pad(ts_start_i, (pad_width, 0), mode='constant', constant_values=0).tolist()
                     ts_i = np.pad(ts_i, (pad_width, 0), mode='constant', constant_values=0).tolist()
                     d_value_i = np.pad(d_value_i, (pad_width, 0), mode='constant', constant_values=0).tolist()
                     d_info_i = np.pad(d_info_i, (pad_width, 0), mode='constant',
-                                    constant_values=self.convert_token_to_id(self.pad_token)).tolist()
+                                      constant_values=self.convert_token_to_id(self.pad_token)).tolist()
                     attention_mask_i = [0] * pad_width + [1] * seq_len[i]
                 else:
                     raise ValueError('Not valid padding direction')
             else:
                 attention_mask_i = [1] * seq_len[i]
-            data_i = np.array([ts_i, d_value_i, d_info_i]).transpose().tolist()
+            data_i = np.array([ts_start_i, ts_i, d_value_i, d_info_i]).transpose().tolist()
             data.append(data_i)
             attention_mask.append(attention_mask_i)
         if return_tensors == 'np':

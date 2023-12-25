@@ -16,7 +16,7 @@ class Base(nn.Module):
         self.text_encoder = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
                                                 cache_folder=os.path.join('output', 'model'))
         self.info_embedding = self.make_info_embedding()
-        self.encoder = nn.Linear(embedding_size, hidden_size)
+        self.encoder = nn.Linear(embedding_size + 1, hidden_size) # ts_start  +1
         self.core = nn.LSTM(hidden_size, hidden_size, num_layers=num_layers, bias=True, batch_first=True,
                             dropout=0.0, bidirectional=False)
         self.decoder = nn.Linear(hidden_size, embedding_size)
@@ -45,9 +45,11 @@ class Base(nn.Module):
 
     def forward(self, input):
         output = {}
-        x_target = input['data'][..., :2]
-        x_info_target = input['data'][..., 2].long()
+
+        x_target = input['data'][..., :-1]
+        x_info_target = input['data'][..., -1].long()
         mask = input['attention_mask'][:, 1:]
+
         x_info = self.info_embedding(x_info_target)
         x = torch.cat([x_target, x_info], dim=-1)
 
@@ -58,25 +60,15 @@ class Base(nn.Module):
         x = x[:, :-1]
         x_ts, x_value, x_info = x[..., 0], x[..., 1], x[..., 2:]
 
-        x_ts = x_ts.sigmoid()
-        x_value = x_value.sigmoid()
-
-
-        # norm_x = torch.linalg.norm(x_info, 2, dim=-1, keepdim=True)
-        # norm_embedding = torch.linalg.norm(self.info_embedding.weight.t(), 2, dim=0, keepdim=True)
-        # normalization = torch.maximum(norm_x, norm_x.new_tensor([1e-8])) * \
-        #                 torch.maximum(norm_embedding, norm_embedding.new_tensor([1e-8]))
-        # x_info_1 = (x_info @ self.info_embedding.weight.t()) / normalization
-        #
-        # x_info = F.relu(x_info_1)
-        # # x_info = (x_info_1 + 1) / 2
-        # x_info = x_info / x_info.sum(dim=-1, keepdim=True).log()
+        x_ts = x_ts.clamp_(0, 1)
+        x_value = x_value.clamp_(0, 1)
 
         x_info = x_info @ self.info_embedding.weight.t()
+        x_info = x_info / torch.linalg.norm(self.info_embedding.weight.t(), dim=0)
 
         x_target = x_target[:, 1:]
-        x_ts_target = x_target[..., 0]
-        x_value_target = x_target[..., 1]
+        x_ts_target = x_target[..., 1]
+        x_value_target = x_target[..., 2]
         x_info_target = x_info_target[:, 1:]
 
         x_ts = x_ts[mask]
@@ -87,10 +79,9 @@ class Base(nn.Module):
         x_info_target[~mask] = -100
 
         num_loss = mask.float().sum()
-        ts_loss = F.binary_cross_entropy(x_ts, x_ts_target, reduction='sum') / num_loss
-        value_loss = F.binary_cross_entropy(x_value, x_value_target, reduction='sum') / num_loss
+        ts_loss = F.mse_loss(x_ts, x_ts_target, reduction='sum') / num_loss
+        value_loss = F.mse_loss(x_value, x_value_target, reduction='sum') / num_loss
         info_loss = F.cross_entropy(x_info, x_info_target, reduction='sum') / num_loss
-        # info_loss = F.nll_loss(x_info, x_info_target, reduction='sum') / num_loss
         loss = ts_loss + value_loss + info_loss
         output['loss'] = loss
 

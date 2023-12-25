@@ -17,7 +17,7 @@ def make_metric(metric_name):
         pivot_direction = 'down'
         pivot_name = 'Loss'
         for k in metric_name:
-            metric_name[k].extend(['MAE-ar-d~value', 'MAE-ar-time', 'Accuracy-ar-d~info'])
+            metric_name[k].extend(['MSE-ar-d~value', 'MSE-ar-time', 'Accuracy-ar-d~info'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, pivot, pivot_direction, pivot_name)
@@ -41,23 +41,23 @@ def RMSE(output, target):
     return rmse
 
 
-def mae_ts(output, target, mask):
+def mse_ts(output, target, mask):
     output_ts = output[:, 0]
-    target_ts = target[:, 1:, 0][mask[:, 1:]]
-    mae = F.l1_loss(output_ts, target_ts, reduction='mean').item()
-    return mae
+    target_ts = target[:, 1:, 1][mask[:, 1:]]
+    mse = F.mse_loss(output_ts, target_ts, reduction='mean').item()
+    return mse
 
 
-def mae_d_value(output, target, mask):
+def mse_d_value(output, target, mask):
     output_d_value = output[:, 1]
-    target_d_value = target[:, 1:, 1][mask[:, 1:]]
-    mae = F.l1_loss(output_d_value, target_d_value, reduction='mean').item()
-    return mae
+    target_d_value = target[:, 1:, 2][mask[:, 1:]]
+    mse = F.mse_loss(output_d_value, target_d_value, reduction='mean').item()
+    return mse
 
 
 def acc_d_info(output, target, mask):
     output_d_info = output[:, 2]
-    target_d_info = target[:, 1:, 2][mask[:, 1:]]
+    target_d_info = target[:, 1:, 3][mask[:, 1:]]
     acc = (output_d_info == target_d_info).float().mean().item()
     return acc
 
@@ -74,15 +74,15 @@ class Metric:
             for m in metric_name[split]:
                 if m == 'Loss':
                     metric[split][m] = {'mode': 'batch', 'metric': (lambda input, output: output['loss'].item())}
-                elif m == 'MAE-ar-time':
+                elif m == 'MSE-ar-time':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
-                                            lambda input, output: recur(mae_ts, output['target'], input['data'],
+                                            lambda input, output: recur(mse_ts, output['target'], input['data'],
                                                                         input['attention_mask']))}
-                elif m == 'MAE-ar-d~value':
+                elif m == 'MSE-ar-d~value':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
-                                            lambda input, output: recur(mae_d_value, output['target'], input['data'],
+                                            lambda input, output: recur(mse_d_value, output['target'], input['data'],
                                                                         input['attention_mask']))}
                 elif m == 'Accuracy-ar-d~info':
                     metric[split][m] = {'mode': 'batch',
