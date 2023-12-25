@@ -17,7 +17,7 @@ def make_metric(metric_name):
         pivot_direction = 'down'
         pivot_name = 'Loss'
         for k in metric_name:
-            metric_name[k].extend(['MSE-ar-d~value', 'MSE-ar-time', 'Accuracy-ar-d~info'])
+            metric_name[k].extend(['MSE-ar-ts', 'MSE-ar-d~value', 'Accuracy-ar-d~info'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, pivot, pivot_direction, pivot_name)
@@ -74,7 +74,7 @@ class Metric:
             for m in metric_name[split]:
                 if m == 'Loss':
                     metric[split][m] = {'mode': 'batch', 'metric': (lambda input, output: output['loss'].item())}
-                elif m == 'MSE-ar-time':
+                elif m == 'MSE-ar-ts':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
                                             lambda input, output: recur(mse_ts, output['target'], input['data'],
