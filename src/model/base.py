@@ -27,7 +27,7 @@ class Base(nn.Module):
         num_embedding, embedding_dim = info_embedding.shape
         embedding = nn.Embedding(num_embedding, embedding_dim,
                                  padding_idx=self.tokenizer.convert_token_to_id(self.tokenizer.pad_token))
-        embedding.weight.data.copy_(info_embedding.data)
+        embedding.weight.data = info_embedding.data
         embedding.weight.requires_grad = False
         return embedding
 
@@ -96,5 +96,7 @@ def base(tokenizer):
     hidden_size = cfg[cfg['model_name']]['hidden_size']
     num_layers = cfg[cfg['model_name']]['num_layers']
     model = Base(tokenizer, embedding_size, hidden_size, num_layers)
-    model.apply(init_param)
+    model.encoder.apply(init_param)
+    model.core.apply(init_param)
+    model.decoder.apply(init_param)
     return model
