@@ -90,9 +90,11 @@ class Tokenizer:
         if return_tensors == 'np':
             data = np.array(data, dtype=np.float32)
             attention_mask = np.array(attention_mask, dtype=bool)
-        if return_tensors == 'pt':
+        elif return_tensors == 'pt':
             data = torch.tensor(data, dtype=torch.float32)
             attention_mask = torch.tensor(attention_mask, dtype=torch.bool)
+        else:
+            raise ValueError('Not valid return tensor')
         output = {'data': data, 'attention_mask': attention_mask}
         return output
 
@@ -100,10 +102,10 @@ class Tokenizer:
         d_name, d_func, d_type = list(data['d_name']), list(data['d_func']), list(data['d_type'])
         d_info = []
         for j in range(len(d_name)):
-            d_info_i = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
+            d_info_j = 'Name: {}, Function: {}, Info: {}'.format(d_name[j], d_func[j], d_type[j])
             if self.if_train:
-                self.update(d_info_i)
-            d_info.append(d_info_i)
+                self.update(d_info_j)
+            d_info.append(d_info_j)
         return d_info
 
     def convert_token_to_id(self, token):
