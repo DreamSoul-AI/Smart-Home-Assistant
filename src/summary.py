@@ -4,7 +4,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from torchinfo import summary
 from config import cfg, process_args
-from dataset import make_dataset, make_data_loader, process_dataset, collate
+from dataset import make_dataset, make_data_loader, process_dataset
 from model import make_model
 from module import save, to_device, process_control
 
@@ -18,34 +18,36 @@ process_args(args)
 
 
 def main():
-    process_control()
-    seeds = list(range(cfg['init_seed'], cfg['init_seed'] + cfg['num_experiment']))
-    for i in range(cfg['num_experiment']):
-        model_tag_list = [str(seeds[i]), cfg['control_name']]
-        cfg['model_tag'] = '_'.join([x for x in model_tag_list if x])
-        print('Experiment: {}'.format(cfg['model_tag']))
+    seeds = list(range(cfg['init_seed'], cfg['init_seed'] + cfg['num_experiments']))
+    for i in range(cfg['num_experiments']):
+        tag_list = [str(seeds[i]), cfg['control_name']]
+        cfg['tag'] = '_'.join([x for x in tag_list if x])
+        process_control()
+        print('Experiment: {}'.format(cfg['tag']))
         runExperiment()
     return
 
 
 def runExperiment():
-    cfg['seed'] = int(cfg['model_tag'].split('_')[0])
+    cfg['seed'] = int(cfg['tag'].split('_')[0])
     torch.manual_seed(cfg['seed'])
     torch.cuda.manual_seed(cfg['seed'])
+    cfg['path'] = os.path.join('output', 'exp')
+    cfg['tag_path'] = os.path.join(cfg['path'], cfg['tag'])
     dataset = make_dataset(cfg['data_name'])
+    cfg['step'] = 0
     dataset = process_dataset(dataset)
-    batch_size = 2
-    cfg[cfg['model_name']]['batch_size']['train'] = batch_size
-    data_loader = make_data_loader(dataset, cfg['model_name'])
+    model = make_model(cfg['model'])
+    model = model.to(cfg['device'])
+    batch_size = {'train': 2, 'test': 2}
+    data_loader = make_data_loader(dataset, batch_size)
     input = next(iter(data_loader['train']))
-    input = collate(input)
     input = to_device(input, cfg['device'])
-    model = make_model(cfg['model_name'])
     content = summary(model, input_data=[{'data': input['data']}], depth=50,
                       col_names=['input_size', 'output_size', 'num_params', 'params_percent', 'kernel_size',
                                  'mult_adds', 'trainable'])
     print(content)
-    save(content, os.path.join('output', 'summary', '{}'.format(cfg['model_tag'])))
+    save(content, os.path.join(cfg['tag_path'], 'summary'))
     return
 
 

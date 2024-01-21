@@ -67,8 +67,18 @@ def make_dataset(data_name, tokenizer=None, verbose=True):
     return dataset_
 
 
-def input_collate(batch):
-    return {key: [b[key] for b in batch] for key in batch[0]}
+def input_collate(input):
+    first = input[0]
+    batch = {}
+    for k, v in first.items():
+        if v is not None and not isinstance(v, str):
+            if isinstance(v, torch.Tensor):
+                batch[k] = torch.stack([f[k] for f in input])
+            elif isinstance(v, np.ndarray):
+                batch[k] = torch.tensor(np.stack([f[k] for f in input]))
+            else:
+                batch[k] = torch.tensor([f[k] for f in input])
+    return batch
 
 
 def make_data_collate(collate_mode):
@@ -76,34 +86,37 @@ def make_data_collate(collate_mode):
         return input_collate
     elif collate_mode == 'default':
         return default_collate
-    elif collate_mode == 'transformer':
-        return default_data_collator
     else:
         raise ValueError('Not valid collate mode')
 
 
-def make_data_loader(dataset, tag, batch_size=None, shuffle=None, sampler=None):
+def make_data_loader(dataset, batch_size, num_steps=None, step=0, step_period=1, pin_memory=True,
+                     num_workers=0, collate_mode='dict', seed=0, shuffle=True):
     data_loader = {}
     for k in dataset:
-        _batch_size = cfg[tag]['batch_size'][k] if batch_size is None else batch_size[k]
-        _shuffle = cfg[tag]['shuffle'][k] if shuffle is None else shuffle[k]
-        if sampler is None:
-            data_loader[k] = DataLoader(dataset=dataset[k], batch_size=_batch_size, shuffle=_shuffle,
-                                        pin_memory=cfg['pin_memory'], num_workers=cfg['num_workers'],
-                                        collate_fn=make_data_collate(cfg['collate_mode']),
-                                        worker_init_fn=np.random.seed(cfg['seed']))
+        if k == 'train' and num_steps is not None:
+            num_samples = batch_size[k] * (num_steps - step) * step_period
+            if num_samples > 0:
+                generator = torch.Generator()
+                generator.manual_seed(seed)
+                sampler = torch.utils.data.RandomSampler(dataset[k], replacement=False, num_samples=num_samples,
+                                                         generator=generator)
+                data_loader[k] = DataLoader(dataset=dataset[k], batch_size=batch_size[k], sampler=sampler,
+                                            pin_memory=pin_memory, num_workers=num_workers,
+                                            collate_fn=make_data_collate(collate_mode),
+                                            worker_init_fn=np.random.seed(seed))
         else:
-            data_loader[k] = DataLoader(dataset=dataset[k], batch_size=_batch_size, sampler=sampler[k],
-                                        pin_memory=cfg['pin_memory'], num_workers=cfg['num_workers'],
-                                        collate_fn=make_data_collate(cfg['collate_mode']),
-                                        worker_init_fn=np.random.seed(cfg['seed']))
+            if k == 'train':
+                data_loader[k] = DataLoader(dataset=dataset[k], batch_size=batch_size[k], shuffle=shuffle,
+                                            pin_memory=pin_memory, num_workers=num_workers,
+                                            collate_fn=make_data_collate(collate_mode),
+                                            worker_init_fn=np.random.seed(seed))
+            else:
+                data_loader[k] = DataLoader(dataset=dataset[k], batch_size=batch_size[k], shuffle=False,
+                                            pin_memory=pin_memory, num_workers=num_workers,
+                                            collate_fn=make_data_collate(collate_mode),
+                                            worker_init_fn=np.random.seed(seed))
     return data_loader
-
-
-def collate(input):
-    for k in input:
-        input[k] = torch.stack(input[k], 0)
-    return input
 
 
 def process_dataset(dataset, tokenizer):
