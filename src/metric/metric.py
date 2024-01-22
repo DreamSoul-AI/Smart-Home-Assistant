@@ -18,7 +18,7 @@ def make_metric(split, **kwargs):
         best_direction = 'down'
         best_metric_name = 'Loss'
         for k in metric_name:
-            metric_name[k].extend(['MSE-ar-ts', 'MSE-ar-d~value', 'Accuracy-ar-d~info'])
+            metric_name[k].extend(['Loss', 'MSE-ar-ts', 'MSE-ar-d~value', 'Accuracy-ar-d~info'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, best, best_direction, best_metric_name)

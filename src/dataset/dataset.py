@@ -58,8 +58,8 @@ def make_dataset(data_name, tokenizer=None, verbose=True):
             transforms.ToTensor(),
             transforms.Normalize(*data_stats[data_name])])
     elif data_name in ['SmartHome']:
-        dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=['hh103'])
-        dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=['hh103'])
+        dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=['hh105'])
+        dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=['hh105'])
     else:
         raise ValueError('Not valid dataset name')
     if verbose:
@@ -151,4 +151,8 @@ def process_dataset(dataset, tokenizer):
         )
 
     cfg['data_size'] = {k: len(processed_dataset[k]) for k in processed_dataset}
+    if 'num_epochs' in cfg:
+        cfg['num_steps'] = int(np.ceil(len(processed_dataset['train']) / cfg['batch_size'])) * cfg['num_epochs']
+        cfg['eval_period'] = int(np.ceil(len(processed_dataset['train']) / cfg['batch_size']))
+        cfg[cfg['tag']]['optimizer']['num_steps'] = cfg['num_steps']
     return processed_dataset
