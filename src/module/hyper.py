@@ -9,7 +9,7 @@ def process_control():
     cfg['step_period'] = 1
     cfg['num_steps'] = 80000
     cfg['eval_period'] = 200
-    # cfg['num_epochs'] = 400
+    cfg['num_epochs'] = 20
     cfg['collate_mode'] = 'dict'
     cfg['embedding_size'] = 768 + 2
     cfg['max_length'] = 128
@@ -18,10 +18,14 @@ def process_control():
     cfg['model'] = {}
     cfg['model']['model_name'] = cfg['model_name']
     data_shape = {'MNIST': [1, 28, 28], 'FashionMNIST': [1, 28, 28], 'SVHN': [3, 32, 32], 'CIFAR10': [3, 32, 32],
-                  'CIFAR100': [3, 32, 32]}
-    target_size = {'MNIST': 10, 'FashionMNIST': 10, 'SVHN': 10, 'CIFAR10': 10, 'CIFAR100': 100}
+                  'CIFAR100': [3, 32, 32], 'SmartHome': [cfg['embedding_size'], cfg['max_length']]}
+    target_size = {'MNIST': 10, 'FashionMNIST': 10, 'SVHN': 10, 'CIFAR10': 10, 'CIFAR100': 100,
+                   'SmartHome': cfg['embedding_size']}
     cfg['model']['data_shape'] = data_shape[cfg['data_name']]
     cfg['model']['target_size'] = target_size[cfg['data_name']]
+    cfg['model']['embedding_size'] = cfg['embedding_size']
+    cfg['model']['core_model_name'] = 'lstm'
+
     cfg['model']['linear'] = {}
     cfg['model']['mlp'] = {'hidden_size': 128, 'scale_factor': 2, 'num_layers': 2, 'activation': 'relu'}
     cfg['model']['cnn'] = {'hidden_size': [64, 128, 256, 512]}
@@ -32,11 +36,11 @@ def process_control():
     cfg['model']['lstm'] = {'hidden_size': 128, 'num_layers': 2}
 
     cfg['model']['data_shape'] = data_shape[cfg['data_name']]
-    cfg['model']['target_size'] = cfg['data_shape'][0]
+    cfg['model']['target_size'] = cfg['model']['data_shape'][0]
 
     cfg['model']['base'] = {}
     cfg['model']['base']['encoder'] = {'embedding_size': cfg['embedding_size']}
-    cfg['model']['base']['core'] = {'data_shape': cfg['data_shape']}
+    cfg['model']['base']['core'] = {'data_shape': cfg['model']['data_shape']}
     cfg['model']['base']['decoder'] = {'embedding_size': cfg['embedding_size']}
 
     tag = cfg['tag']
@@ -52,5 +56,4 @@ def process_control():
     cfg[tag]['optimizer']['step_period'] = cfg['step_period']
     cfg[tag]['optimizer']['num_steps'] = cfg['num_steps']
     cfg[tag]['optimizer']['scheduler_name'] = 'CosineAnnealingLR'
-
     return

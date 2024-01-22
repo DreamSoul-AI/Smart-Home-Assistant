@@ -11,8 +11,8 @@ def make_tokenizer():
     return tokenizer
 
 
-def make_model(cfg):
-    model = eval('model.{}(cfg)'.format(cfg['model_name']))
+def make_model(tokenizer, cfg):
+    model = eval('model.{}(tokenizer, cfg)'.format(cfg['model_name']))
     return model
 
 

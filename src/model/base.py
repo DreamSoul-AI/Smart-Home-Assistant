@@ -2,7 +2,6 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from config import cfg
 from model import LSTM, init_param
 from sentence_transformers import SentenceTransformer
 
@@ -91,10 +90,10 @@ class Base(nn.Module):
         return output
 
 
-def base(tokenizer):
+def base(tokenizer, cfg):
     embedding_size = cfg['embedding_size']
-    hidden_size = cfg[cfg['model_name']]['hidden_size']
-    num_layers = cfg[cfg['model_name']]['num_layers']
+    hidden_size = cfg[cfg['core_model_name']]['hidden_size']
+    num_layers = cfg[cfg['core_model_name']]['num_layers']
     model = Base(tokenizer, embedding_size, hidden_size, num_layers)
     model.encoder.apply(init_param)
     model.core.apply(init_param)

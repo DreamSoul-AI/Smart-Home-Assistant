@@ -6,10 +6,10 @@ import time
 import torch
 import torch.backends.cudnn as cudnn
 from config import cfg, process_args
-from dataset import make_dataset, make_data_loader, process_dataset, collate
-from metric import make_metric, make_logger
-from model import base, make_optimizer, make_scheduler
-from module import save, to_device, process_control, resume, makedir_exist_ok
+from dataset import make_dataset, make_data_loader, process_dataset
+from metric import make_logger
+from model import make_model, make_optimizer, make_scheduler
+from module import check, resume, to_device, process_control
 
 cudnn.benchmark = True
 parser = argparse.ArgumentParser(description='cfg')
@@ -21,107 +21,123 @@ process_args(args)
 
 
 def main():
-    process_control()
     seeds = list(range(cfg['init_seed'], cfg['init_seed'] + cfg['num_experiments']))
     for i in range(cfg['num_experiments']):
-        model_tag_list = [str(seeds[i]), cfg['control_name']]
-        cfg['model_tag'] = '_'.join([x for x in model_tag_list if x])
-        print('Experiment: {}'.format(cfg['model_tag']))
+        tag_list = [str(seeds[i]), cfg['control_name']]
+        cfg['tag'] = '_'.join([x for x in tag_list if x])
+        process_control()
+        print('Experiment: {}'.format(cfg['tag']))
         runExperiment()
     return
 
 
 def runExperiment():
-    cfg['seed'] = int(cfg['model_tag'].split('_')[0])
+    cfg['seed'] = int(cfg['tag'].split('_')[0])
     torch.manual_seed(cfg['seed'])
     torch.cuda.manual_seed(cfg['seed'])
-    model_path = os.path.join('output', 'model')
-    model_tag_path = os.path.join(model_path, cfg['model_tag'])
-    checkpoint_path = os.path.join(model_tag_path, 'checkpoint')
-    best_path = os.path.join(model_tag_path, 'best')
-    tokenizer_path = os.path.join('output', 'tokenizer')
-    tokenizer = resume(os.path.join(tokenizer_path, cfg['data_name']))
-    model = base(tokenizer)
-    model = model.to(cfg['device'])
+    cfg['path'] = os.path.join('output', 'exp')
+    cfg['tag_path'] = os.path.join(cfg['path'], cfg['tag'])
+    cfg['checkpoint_path'] = os.path.join(cfg['tag_path'], 'checkpoint')
+    cfg['best_path'] = os.path.join(cfg['tag_path'], 'best')
+    cfg['logger_path'] = os.path.join(cfg['tag_path'], 'logger', 'train', 'runs')
+    cfg['tokenizer_path'] = os.path.join(cfg['path'], 'tokenizer')
+    tokenizer = resume(os.path.join(cfg['tokenizer_path']))[cfg['data_name']]
     dataset = make_dataset(cfg['data_name'])
     dataset = process_dataset(dataset, tokenizer)
-    data_loader = make_data_loader(dataset, cfg['model_name'])
-    metric = make_metric({'train': ['Loss'], 'test': ['Loss']})
-    logger = make_logger(os.path.join('output', 'runs', 'train_{}'.format(cfg['model_tag'])))
-    result = resume(os.path.join(checkpoint_path, 'model'), resume_mode=cfg['resume_mode'])
+    model = make_model(tokenizer, cfg['model'])
+    result = resume(cfg['checkpoint_path'], resume_mode=cfg['resume_mode'])
     if result is None:
-        cfg['epoch'] = 1
-        optimizer = make_optimizer(model.parameters(), cfg['model_name'])
-        scheduler = make_scheduler(optimizer, cfg['model_name'])
+        cfg['step'] = 0
+        model = model.to(cfg['device'])
+        optimizer = make_optimizer(model.parameters(), cfg[cfg['tag']]['optimizer'])
+        scheduler = make_scheduler(optimizer, cfg[cfg['tag']]['optimizer'])
+        logger = make_logger(cfg['logger_path'], data_name=cfg['data_name'])
     else:
-        cfg['epoch'] = result['epoch']
-        model.load_state_dict(result['model_state_dict'])
-        optimizer = make_optimizer(model.parameters(), cfg['model_name'])
-        optimizer.load_state_dict(result['optimizer_state_dict'])
-        scheduler = make_scheduler(optimizer, cfg['model_name'])
-        scheduler.load_state_dict(result['scheduler_state_dict'])
-        metric.load_state_dict(result['metric_state_dict'])
-        logger.load_state_dict(result['logger_state_dict'])
-    for epoch in range(cfg['epoch'], cfg[cfg['model_name']]['num_epochs'] + 1):
-        cfg['epoch'] = epoch
-        train(data_loader['train'], model, optimizer, scheduler, metric, logger)
-        test(data_loader['test'], model, metric, logger)
-        result = {'cfg': cfg, 'epoch': cfg['epoch'] + 1, 'model_state_dict': model.state_dict(),
-                  'optimizer_state_dict': optimizer.state_dict(), 'scheduler_state_dict': scheduler.state_dict(),
-                  'metric_state_dict': metric.state_dict(), 'logger_state_dict': logger.state_dict()}
-        save(result, os.path.join(checkpoint_path, 'model'))
-        if metric.compare(logger.mean['test/{}'.format(metric.pivot_name)]):
-            metric.update(logger.mean['test/{}'.format(metric.pivot_name)])
-            makedir_exist_ok(best_path)
-            shutil.copy(os.path.join(checkpoint_path, 'model'), os.path.join(best_path, 'model'))
-        logger.save(True)
+        cfg['step'] = result['cfg']['step']
+        model = model.to(cfg['device'])
+        optimizer = make_optimizer(model.parameters(), cfg[cfg['tag']]['optimizer'])
+        scheduler = make_scheduler(optimizer, cfg[cfg['tag']]['optimizer'])
+        logger = make_logger(cfg['logger_path'], data_name=cfg['data_name'])
+        model.load_state_dict(result['model'])
+        optimizer.load_state_dict(result['optimizer'])
+        scheduler.load_state_dict(result['scheduler'])
+        logger.load_state_dict(result['logger'])
+        logger.reset()
+    data_loader = make_data_loader(dataset, cfg[cfg['tag']]['optimizer']['batch_size'], cfg['num_steps'],
+                                   cfg['step'], cfg['step_period'], cfg['pin_memory'], cfg['num_workers'],
+                                   cfg['collate_mode'], cfg['seed'])
+    data_iterator = enumerate(data_loader['train'])
+    while cfg['step'] < cfg['num_steps']:
+        train(data_iterator, model, optimizer, scheduler, logger)
+        test(data_loader['test'], model, logger)
+        result = {'cfg': cfg, 'model': model.state_dict(),
+                  'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(),
+                  'logger': logger.state_dict()}
+        check(result, cfg['checkpoint_path'])
+        if logger.compare('test'):
+            shutil.copytree(cfg['checkpoint_path'], cfg['best_path'], dirs_exist_ok=True)
         logger.reset()
     return
 
 
-def train(data_loader, model, optimizer, scheduler, metric, logger):
+def train(data_loader, model, optimizer, scheduler, logger):
     model.train(True)
     start_time = time.time()
-    for i, input in enumerate(data_loader):
-        input_size = input['data'].size(0)
-        input = to_device(input, cfg['device'])
-        output = model(input)
-        output['loss'].backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-        optimizer.step()
-        optimizer.zero_grad()
-        evaluation = metric.evaluate('train', 'batch', input, output)
-        logger.append(evaluation, 'train', n=input_size)
-        if i % int((len(data_loader) * cfg['log_interval']) + 1) == 0:
-            batch_time = (time.time() - start_time) / (i + 1)
-            lr = optimizer.param_groups[0]['lr']
-            epoch_finished_time = datetime.timedelta(seconds=round(batch_time * (len(data_loader) - i - 1)))
-            exp_finished_time = epoch_finished_time + datetime.timedelta(
-                seconds=round((cfg[cfg['model_name']]['num_epochs'] - cfg['epoch']) * batch_time * len(data_loader)))
-            info = {'info': ['Model: {}'.format(cfg['model_tag']),
-                             'Train Epoch: {}({:.0f}%)'.format(cfg['epoch'], 100. * i / len(data_loader)),
-                             'Learning rate: {:.6f}'.format(lr), 'Epoch Finished Time: {}'.format(epoch_finished_time),
-                             'Experiment Finished Time: {}'.format(exp_finished_time)]}
-            logger.append(info, 'train')
-            print(logger.write('train', metric.metric_name['train']))
-    scheduler.step()
+    with logger.profiler:
+        for i, input in data_loader:
+            if i % cfg['step_period'] == 0 and cfg['profile']:
+                logger.profiler.step()
+            input_size = input['data'].size(0)
+            input = to_device(input, cfg['device'])
+            output = model(input)
+            loss = 1 / cfg['step_period'] * output['loss']
+            loss.backward()
+            if (i + 1) % cfg['step_period'] == 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+            evaluation = logger.evaluate('train', 'batch', input, output)
+            logger.append(evaluation, 'train', n=input_size)
+            idx = cfg['step'] % cfg['eval_period']
+            if idx % int(cfg['eval_period'] * cfg['log_interval']) == 0 and (i + 1) % cfg['step_period'] == 0:
+                step_time = (time.time() - start_time) / (idx + 1)
+                lr = optimizer.param_groups[0]['lr']
+                epoch_finished_time = datetime.timedelta(
+                    seconds=round((cfg['eval_period'] - (idx + 1)) * step_time))
+                exp_finished_time = datetime.timedelta(
+                    seconds=round((cfg['num_steps'] - (cfg['step'] + 1)) * step_time))
+                info = {'info': ['Model: {}'.format(cfg['tag']),
+                                 'Train Epoch: {}({:.0f}%)'.format((cfg['step'] // cfg['eval_period']) + 1,
+                                                                   100. * idx / cfg['eval_period']),
+                                 'Learning rate: {:.6f}'.format(lr),
+                                 'Epoch Finished Time: {}'.format(epoch_finished_time),
+                                 'Experiment Finished Time: {}'.format(exp_finished_time)]}
+                logger.append(info, 'train')
+                print(logger.write('train'))
+            if (i + 1) % cfg['step_period'] == 0:
+                cfg['step'] += 1
+            if (idx + 1) % cfg['eval_period'] == 0 and (i + 1) % cfg['step_period'] == 0:
+                break
     return
 
 
-def test(data_loader, model, metric, logger):
+def test(data_loader, model, logger):
     with torch.no_grad():
         model.train(False)
         for i, input in enumerate(data_loader):
             input_size = input['data'].size(0)
             input = to_device(input, cfg['device'])
             output = model(input)
-            evaluation = metric.evaluate('test', 'batch', input, output)
+            evaluation = logger.evaluate('test', 'batch', input, output)
             logger.append(evaluation, 'test', input_size)
-        evaluation = metric.evaluate('test', 'full')
+        evaluation = logger.evaluate('test', 'full')
         logger.append(evaluation, 'test', input_size)
-        info = {'info': ['Model: {}'.format(cfg['model_tag']), 'Test Epoch: {}({:.0f}%)'.format(cfg['epoch'], 100.)]}
+        info = {'info': ['Model: {}'.format(cfg['tag']),
+                         'Test Epoch: {}({:.0f}%)'.format(cfg['step'] // cfg['eval_period'], 100.)]}
         logger.append(info, 'test')
-        print(logger.write('test', metric.metric_name['test']))
+        print(logger.write('test'))
+        logger.save(True)
     return
 
 

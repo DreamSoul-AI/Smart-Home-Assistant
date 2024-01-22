@@ -4,6 +4,7 @@ import os
 import pickle
 import torch
 from torchvision.utils import save_image
+from .utils import recur
 
 
 def check_exists(path):
@@ -54,13 +55,29 @@ def save_img(img, path, nrow=10, padding=1, pad_value=0, value_range=None):
     return
 
 
-def resume(path, verbose=True, resume_mode=1):
+def to_device(input, device):
+    output = recur(lambda x, y: x.to(y), input, device)
+    return output
+
+
+def check(result, path):
+    for filename in result:
+        save(result[filename], os.path.join(path, filename))
+    return
+
+
+def resume(path, resume_mode=1, key=None, verbose=True):
     if os.path.exists(path) and resume_mode == 1:
-        result = load(path)
-        if verbose and isinstance(result, dict) and 'epoch' in result:
-            print('Resume from {}'.format(result['epoch']))
+        result = {}
+        filenames = os.listdir(path)
+        for filename in filenames:
+            if key is not None and filename not in key:
+                continue
+            result[filename] = load(os.path.join(path, filename))
+        if len(result) > 0 and verbose:
+            print('Resume complete')
     else:
-        if resume_mode == 1:
+        if resume_mode == 1 and verbose:
             print('Not exists: {}'.format(path))
         result = None
     return result
