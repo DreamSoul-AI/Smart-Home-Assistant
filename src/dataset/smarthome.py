@@ -100,7 +100,7 @@ class SmartHome(Dataset):
     def make_data(self, subset):
         print('----------------make_data-------------------')
         data = pd.read_csv(os.path.join(self.raw_folder, subset, 'data.csv'), delimiter=',')
-        subset_ratio = 0.01 # make it small for test
+        subset_ratio = 0.1 # make it small for test
         split_index = int(subset_ratio * len(data))
         data = data[:split_index]
         env = pd.read_csv(os.path.join(self.raw_folder, subset, 'env.csv'), delimiter=',')
@@ -159,9 +159,8 @@ class SmartHome(Dataset):
             for j in range(len(pred_len)):  # 遍历所有预测长度
                 pred_len_j = pred_len[j]  # 给pred_len_j赋值
                 t_pred_end_j = t_end + pred_len_j
-                target_i_j = controller_data[
-                    (controller_data['ts'] < t_pred_end_j) & (controller_data[
-                                                                  'ts'] >= t_end)]  # 以t_end为起点，t_pred_end_j为终点，在controller_data中获取target_i_j，即在预测范围内的controller_data数据
+                target_i_j = controller_data[(controller_data['ts'] < t_pred_end_j) &
+                                             (controller_data['ts'] >= t_end)]  # 以t_end为起点，t_pred_end_j为终点，在controller_data中获取target_i_j，即在预测范围内的controller_data数据
                 detect_i_j = 1 if not target_i_j.empty else 0  # 当target_i_j不为空，detect_i_j = 1，反之为0
                 target_i.append(target_i_j)
                 detect_i.append(detect_i_j)
@@ -177,6 +176,8 @@ class SmartHome(Dataset):
         pred_len = [pd.Timedelta(seconds=p) for p in self.pred_len]  # 预测长度列表，可包含多个预测长度
         start_times = pd.date_range(start=dataset.iloc[0]['ts'], end=dataset.iloc[-1]['ts'] - seq_len,
                                     freq=hop_len)  # 以第一个时间为起点，以300秒为间隔，获取开始时间列表
+
+        # print(dataset['d_type'].unique())
         controller_data = dataset[dataset['d_type'] == 'controller']  # 控制器数据
 
         # Split start_times into chunks

@@ -124,6 +124,7 @@ def process_dataset(dataset, tokenizer):
     window_length = dataset['train'].seq_len
 
     def preprocess_function(examples):
+        print(examples['detect'])
         data = examples['data']
         target = examples['target']
         data = tokenizer(data, window_length=window_length, max_length=max_length, padding=True, truncation=True,
