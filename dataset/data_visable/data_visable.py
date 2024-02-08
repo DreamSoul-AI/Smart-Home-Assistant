@@ -68,8 +68,10 @@ def process(folder_path='',output_dir=''):
     for i in file_names_list :
         process_and_plot_data(i,output_dir)
 
-
-
+if __name__ == '__main__':
+    folder_path = input('folder_path:')
+    output_dir = input('output_dir:')
+    process(folder_path,output_dir)
 
 
 

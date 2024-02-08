@@ -1,4 +1,4 @@
-data_analyze.py
+data_visable.py
 该模块有两个参数folder_path='数据存储路径',output_dir='图表输出路径'。
 遍历'数据存储路径’下所有data_0000.csv格式的文件，对其按如下需求制表并输出图表图片。
 对选取的数据，统计了该年中每天的0，1，2，~23每个小时中controller出现的总次数，并画了可视化的柱状图。
