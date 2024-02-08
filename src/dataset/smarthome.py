@@ -100,10 +100,14 @@ class SmartHome(Dataset):
     def make_data(self, subset):
         print('----------------make_data-------------------')
         data = pd.read_csv(os.path.join(self.raw_folder, subset, 'data.csv'), delimiter=',')
-        subset_ratio = 0.1 # make it small for test
+        subset_ratio = 0.01 # make it small for test
         split_index = int(subset_ratio * len(data))
         data = data[:split_index]
-        env = pd.read_csv(os.path.join(self.raw_folder, subset, 'env.csv'), delimiter=',')
+        env_path = os.path.join(self.raw_folder, subset, 'env.csv')
+        if os.path.exists(env_path):
+            env = pd.read_csv(env_path, delimiter=',')
+        else:
+            env = None
         data = data[['ts', 'd_name', 'd_type', 'd_func', 'd_value']]
 
         data['ts'] = pd.to_datetime(data['ts'])

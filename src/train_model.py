@@ -39,7 +39,7 @@ def runExperiment():
     cfg['tag_path'] = os.path.join(cfg['path'], cfg['tag'])
     cfg['checkpoint_path'] = os.path.join(cfg['tag_path'], 'checkpoint')
     cfg['best_path'] = os.path.join(cfg['tag_path'], 'best')
-    cfg['logger_path'] = os.path.join(cfg['tag_path'], 'logger', 'train', 'runs')
+    cfg['logger_path'] = os.path.join('output', 'logger', 'train', 'runs', cfg['tag'])
     cfg['tokenizer_path'] = os.path.join(cfg['path'], 'tokenizer')
     tokenizer = resume(os.path.join(cfg['tokenizer_path']))[cfg['data_name']]
     dataset = make_dataset(cfg['data_name'])
@@ -93,7 +93,6 @@ def train(data_loader, model, optimizer, scheduler, logger):
             loss = 1 / cfg['step_period'] * output['loss']
             loss.backward()
             if (i + 1) % cfg['step_period'] == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()

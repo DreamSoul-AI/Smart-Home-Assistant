@@ -20,7 +20,7 @@ class Tokenizer:
     @property
     def normalization(self):
         # Constants
-        days_per_year = 365
+        days_per_year = 366
         hours_per_day = 24
         minutes_per_hour = 60
         seconds_per_minute = 60

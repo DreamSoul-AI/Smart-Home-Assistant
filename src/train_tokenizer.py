@@ -1,6 +1,7 @@
 import argparse
 import os
 import torch
+import pandas as pd
 import torch.backends.cudnn as cudnn
 from config import cfg, process_args
 from dataset import make_dataset, process_dataset
@@ -33,11 +34,22 @@ def runExperiment():
     torch.cuda.manual_seed(cfg['seed'])
     cfg['path'] = os.path.join('output', 'exp')
     cfg['tokenizer_path'] = os.path.join(cfg['path'], 'tokenizer')
+    cfg['env_path'] = os.path.join('data', cfg['data_name'], 'raw', 'hh105', 'env.csv')
     tokenizer = make_tokenizer()
-    dataset = make_dataset(cfg['data_name'])
     tokenizer.train(True)
-    dataset = process_dataset(dataset, tokenizer)
+
+    # ------------------------------------------------------------
+    if os.path.exists(cfg['env_path']):
+        env = pd.read_csv(cfg['env_path'], delimiter=',')
+        env = env[env['level'] != 1]
+        tokenizer.tokenize(env)
+    else:
+        dataset = make_dataset(cfg['data_name'])
+        dataset = process_dataset(dataset, tokenizer)
+    # ------------------------------------------------------------
+
     tokenizer.train(False)
+    print(tokenizer.vocab)
     save(tokenizer, os.path.join(cfg['tokenizer_path'], cfg['data_name']))
     return
 
