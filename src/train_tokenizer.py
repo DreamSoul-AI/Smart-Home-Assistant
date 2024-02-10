@@ -44,7 +44,7 @@ def runExperiment():
         env = env[env['level'] != 1]
         tokenizer.tokenize(env)
     else:
-        dataset = make_dataset(cfg['data_name'])
+        dataset = make_dataset(cfg['data_name'], cfg['subset_name'])
         dataset = process_dataset(dataset, tokenizer)
     # ------------------------------------------------------------
 

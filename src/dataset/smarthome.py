@@ -16,7 +16,7 @@ class SmartHome(Dataset):
         self.root = os.path.expanduser(root)  # 替换root中的~为当前系统的用户目录***
         self.split = split
         self.transform = None
-        self.subset = subset
+        self.subset = self.parse_subset(subset)
         self.seq_len = seq_len
         self.hop_len = hop_len
         self.pred_len = pred_len
@@ -24,8 +24,29 @@ class SmartHome(Dataset):
         self.process()
         self.other = {}
 
+    def parse_subset(self, subset):
+        parsed_subset = []
+        subset_list = subset.split('-')
+        for i in range(len(subset_list)):
+            subset_i_list = subset_list[i].split('~')
+            room_set = subset_i_list[0]
+            if len(subset_i_list) == 1:
+                year_set = []
+                filenames = os.listdir(os.path.join(self.raw_folder, room_set))
+                for filename in filenames:
+                    if filename.startswith('data_') and filename.endswith('.csv'):
+                        year_set_i = os.path.splitext(filename)[0].split('_')[1]
+                        year_set.append(year_set_i)
+            else:
+                year_set = subset_i_list[1:]
+            for j in range(len(year_set)):
+                parsed_subset_i_j = '{}~{}'.format(room_set, year_set[j])
+                parsed_subset.append(parsed_subset_i_j)
+        return parsed_subset
+
     def configure(self, subset=None, seq_len=None, hop_len=None, min_len=None,
-                  pred_len=None, transform=None):  # 用于更新参数，子集（subset），序列长度（seq_len），跳跃长度（hop_len），最小长度（min_len）和预测长度（pred_len）
+                  pred_len=None,
+                  transform=None):  # 用于更新参数，子集（subset），序列长度（seq_len），跳跃长度（hop_len），最小长度（min_len）和预测长度（pred_len）
         if subset:
             self.subset = subset
         if seq_len:
@@ -64,15 +85,15 @@ class SmartHome(Dataset):
 
     def process(self):
         self.configure()
-
         # if not check_exists(self.raw_folder):  # 当root\raw文件夹不存在时，抛出报错
         #     self.download()
         for subset in self.subset:
-            data_path = os.path.join(self.processed_folder, subset, self.configuration)  # 数据子集路径
+            room_set, year_set = subset.split('~')
+            data_path = os.path.join(self.processed_folder, room_set, year_set, self.configuration)  # 数据子集路径
             print(f'data_path: {data_path}')
             if not check_exists(data_path):  # 如果子集路径不存在，建立子集路径
                 makedir_exist_ok(data_path)
-                train_set, test_set = self.make_data(subset)
+                train_set, test_set = self.make_data(room_set, year_set)
                 save(train_set, os.path.join(data_path, 'train'))
                 save(test_set, os.path.join(data_path, 'test'))
         self.data, self.meta = self.load_data()
@@ -86,8 +107,9 @@ class SmartHome(Dataset):
         self.length = []
         length = 0
         for subset in self.subset:
-            data[subset], meta[subset] = load(os.path.join(self.processed_folder, subset, self.configuration,
-                                                           self.split))
+            room_set, year_set = subset.split('~')
+            data[subset], meta[subset] = load(os.path.join(self.processed_folder, room_set, year_set,
+                                                           self.configuration, self.split))
             length += len(data[subset]['data'])
             self.length.append(length)
         return data, meta
@@ -97,13 +119,13 @@ class SmartHome(Dataset):
                                                                      self.root, self.split)
         return fmt_str
 
-    def make_data(self, subset):
-        print('----------------make_data-------------------')
-        data = pd.read_csv(os.path.join(self.raw_folder, subset, 'data.csv'), delimiter=',')
-        subset_ratio = 0.01 # make it small for test
+    def make_data(self, room_set, year_set):
+        print('----------------make_data ({}, {})-------------------'.format(room_set, year_set))
+        data = pd.read_csv(os.path.join(self.raw_folder, room_set, 'data_{}.csv'.format(year_set)), delimiter=',')
+        subset_ratio = 0.01  # make it small for test
         split_index = int(subset_ratio * len(data))
         data = data[:split_index]
-        env_path = os.path.join(self.raw_folder, subset, 'env.csv')
+        env_path = os.path.join(self.raw_folder, room_set, 'env.csv')
         if os.path.exists(env_path):
             env = pd.read_csv(env_path, delimiter=',')
         else:
@@ -164,7 +186,8 @@ class SmartHome(Dataset):
                 pred_len_j = pred_len[j]  # 给pred_len_j赋值
                 t_pred_end_j = t_end + pred_len_j
                 target_i_j = controller_data[(controller_data['ts'] < t_pred_end_j) &
-                                             (controller_data['ts'] >= t_end)]  # 以t_end为起点，t_pred_end_j为终点，在controller_data中获取target_i_j，即在预测范围内的controller_data数据
+                                             (controller_data[
+                                                  'ts'] >= t_end)]  # 以t_end为起点，t_pred_end_j为终点，在controller_data中获取target_i_j，即在预测范围内的controller_data数据
                 detect_i_j = 1 if not target_i_j.empty else 0  # 当target_i_j不为空，detect_i_j = 1，反之为0
                 target_i.append(target_i_j)
                 detect_i.append(detect_i_j)
@@ -201,8 +224,6 @@ class SmartHome(Dataset):
             data['target'].extend(result['target'])
             data['detect'].extend(result['detect'])
         return data, start_times
-
-
 
     # def batchify(self, dataset):
     #     from tqdm import tqdm

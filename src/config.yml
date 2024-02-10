@@ -1,7 +1,7 @@
 ---
 # control
 control:
-  data_name: SmartHome
+  data_name: SmartHome-hh105~2015~2016~2017
   model_name: base
 # experiment
 pin_memory: True

@@ -7,8 +7,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-plt.rcParams['font.sans-serif'] = ['SimHei']  # Show Chinese label
-plt.rcParams['axes.unicode_minus'] = False
+# plt.rcParams['font.sans-serif'] = ['SimHei']  # Show Chinese label
+# plt.rcParams['axes.unicode_minus'] = False
 
 cudnn.benchmark = True
 parser = argparse.ArgumentParser(description='cfg')
@@ -85,7 +85,7 @@ def vis(filename, output_path):
     # 设置两个坐标轴的标签
     ax1.set_xlabel('day')
     ax1.set_ylabel('sum')
-    ax2.set_ylabel('占比')
+    ax2.set_ylabel('ratio')
     plt.title('Bar charts and scatter plots')
     plt.savefig(os.path.join(save_path, '2.{}'.format(img_fmt)))
     return

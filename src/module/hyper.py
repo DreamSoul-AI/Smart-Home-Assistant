@@ -2,7 +2,10 @@ from config import cfg
 
 
 def process_control():
-    cfg['data_name'] = cfg['control']['data_name']
+    data_name_list = cfg['control']['data_name'].split('-')
+    cfg['data_name'] = data_name_list[0]
+    if len(data_name_list) > 1:
+        cfg['subset_name'] = '-'.join(data_name_list[1:])
     cfg['model_name'] = cfg['control']['model_name']
 
     cfg['batch_size'] = 250

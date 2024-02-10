@@ -16,7 +16,7 @@ data_stats = {'MNIST': ((0.1307,), (0.3081,)), 'FashionMNIST': ((0.2860,), (0.35
               'SVHN': ((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970))}
 
 
-def make_dataset(data_name, tokenizer=None, verbose=True):
+def make_dataset(data_name, subset_name, verbose=True):
     dataset_ = {}
     if verbose:
         print('fetching data {}...'.format(data_name))
@@ -58,8 +58,8 @@ def make_dataset(data_name, tokenizer=None, verbose=True):
             transforms.ToTensor(),
             transforms.Normalize(*data_stats[data_name])])
     elif data_name in ['SmartHome']:
-        dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=['hh105'])
-        dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=['hh105'])
+        dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=subset_name)
+        dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=subset_name)
     else:
         raise ValueError('Not valid dataset name')
     if verbose:

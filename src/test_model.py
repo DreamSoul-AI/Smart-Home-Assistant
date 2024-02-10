@@ -40,7 +40,7 @@ def runExperiment():
     cfg['result_path'] = os.path.join('output', 'result', cfg['tag'])
     cfg['tokenizer_path'] = os.path.join(cfg['path'], 'tokenizer')
     tokenizer = resume(os.path.join(cfg['tokenizer_path']))[cfg['data_name']]
-    dataset = make_dataset(cfg['data_name'])
+    dataset = make_dataset(cfg['data_name'], cfg['subset_name'])
     model = make_model(tokenizer, cfg['model'])
     result = resume(cfg['best_path'])
     cfg['step'] = result['cfg']['step']
