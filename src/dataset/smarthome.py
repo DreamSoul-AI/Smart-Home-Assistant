@@ -122,7 +122,7 @@ class SmartHome(Dataset):
     def make_data(self, room_set, year_set):
         print('----------------make_data ({}, {})-------------------'.format(room_set, year_set))
         data = pd.read_csv(os.path.join(self.raw_folder, room_set, 'data_{}.csv'.format(year_set)), delimiter=',')
-        subset_ratio = 0.01  # make it small for test
+        subset_ratio = 0.1  # make it small for test
         split_index = int(subset_ratio * len(data))
         data = data[:split_index]
         env_path = os.path.join(self.raw_folder, room_set, 'env.csv')
