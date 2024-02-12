@@ -145,9 +145,6 @@ class SmartHome(Dataset):
         data.loc[data['d_func'] == 'temperature', 'd_value'] = data.loc[
                                                                    data['d_func'] == 'temperature', 'd_value'] / 50.0
 
-        # print('Normalization test max:{},min:{}'.format(data['d_value'].max(), data['d_value'].min()))
-        # print('Normalization test max:{},min:{}'.format(data['ts_normalized'].max(), data['ts_normalized'].min()))
-
         split_ratio = 0.9
         split_index = int(split_ratio * len(data))
         train_data = data[:split_index]
@@ -173,7 +170,7 @@ class SmartHome(Dataset):
 
     def process_chunk(self, chunk_args):
         chunk, seq_len, min_len, pred_len, controller_data, dataset = chunk_args  # 读取元组数据
-        data = {'data': [], 'target': [], 'detect': []}
+        data = {'data': [], 'target': []}
         for t_start in tqdm(chunk, desc="Processing chunk", leave=False):  # 遍历chunk中的start_times
             t_end = t_start + seq_len
             data_i = dataset[
@@ -181,19 +178,15 @@ class SmartHome(Dataset):
             if len(data_i) < min_len:  # data_i小于最小长度时结束处理
                 continue
             target_i = []
-            detect_i = []
             for j in range(len(pred_len)):  # 遍历所有预测长度
                 pred_len_j = pred_len[j]  # 给pred_len_j赋值
                 t_pred_end_j = t_end + pred_len_j
                 target_i_j = controller_data[(controller_data['ts'] < t_pred_end_j) &
                                              (controller_data[
                                                   'ts'] >= t_end)]  # 以t_end为起点，t_pred_end_j为终点，在controller_data中获取target_i_j，即在预测范围内的controller_data数据
-                detect_i_j = 1 if not target_i_j.empty else 0  # 当target_i_j不为空，detect_i_j = 1，反之为0
                 target_i.append(target_i_j)
-                detect_i.append(detect_i_j)
             data['data'].append(data_i)  # 每个序列数据
             data['target'].extend(target_i)  # 每个序列后预测范围内的controller_data数据
-            data['detect'].extend(detect_i)  # 每个序列后预测范围内是否有controller_data
         return data
 
     def batchify(self, dataset):
@@ -218,45 +211,39 @@ class SmartHome(Dataset):
                                 total=len(chunks)))  # 将args传递给self.process_chunk函数在一个池中的独立进程上并行处理，处理结果保存到列表results中
 
         # Combine results
-        data = {'data': [], 'target': [], 'detect': []}
+        data = {'data': [], 'target': []}
         for result in results:
             data['data'].extend(result['data'])
             data['target'].extend(result['target'])
-            data['detect'].extend(result['detect'])
         return data, start_times
 
-    # def batchify(self, dataset):
-    #     from tqdm import tqdm
-    #     seq_len = pd.Timedelta(seconds=self.seq_len)
-    #     hop_len = pd.Timedelta(seconds=self.hop_len)
-    #     min_len = self.min_len
-    #     pred_len = []
-    #     for i in range(len(self.pred_len)):
-    #         pred_len.append(pd.Timedelta(seconds=self.pred_len[i]))
-    #     start_times = pd.date_range(start=dataset.iloc[0]['ts'],
-    #                                 end=dataset.iloc[-1]['ts'] - seq_len, freq=hop_len)
-    #     controller_data = dataset[dataset['d_type'] == 'controller']
-    #     data = {'data': [], 'target': [], 'detect': []}
-    #     for i in tqdm(range(len(start_times))):
-    #         t_start = start_times[i]
-    #         t_end = t_start + seq_len
-    #         data_i = dataset[(dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]
-    #         if len(data_i) < min_len:
-    #                 break
-    #         controller_data_i = dataset[(dataset['ts'] >= t_start) & (dataset['d_type'] == 'controller')]
-    #         target_i = []
-    #         detect_i = []
-    #         for j in range(len(pred_len)):
-    #             pred_len_j = pred_len[j]
-    #             t_pred_end_j = t_end + pred_len_j
-    #             target_i_j = controller_data[
-    #                     (controller_data['ts'] < t_pred_end_j) & (controller_data['ts'] >= t_end)]
-    #             detect_i_j = 1 if not target_i_j.empty else 0
-    #             target_i.append(target_i_j)
-    #             detect_i.append(detect_i_j)
-    #         data['data'].append(data_i)
-    #         data['target'].append(target_i)
-    #         data['detect'].append(detect_i)
-    #     return data, start_times
 
-    # seq_len = 1200, hop_len = 300, pred_len = (300,), min_len = 2
+        # def batchify(self, dataset):
+        #     from tqdm import tqdm
+        #     seq_len = pd.Timedelta(seconds=self.seq_len)
+        #     hop_len = pd.Timedelta(seconds=self.hop_len)
+        #     min_len = self.min_len
+        #     pred_len = []
+        #     for i in range(len(self.pred_len)):
+        #         pred_len.append(pd.Timedelta(seconds=self.pred_len[i]))
+        #     start_times = pd.date_range(start=dataset.iloc[0]['ts'],
+        #                                 end=dataset.iloc[-1]['ts'] - seq_len, freq=hop_len)
+        #     controller_data = dataset[dataset['d_type'] == 'controller']
+        #     data = {'data': [], 'target': []}
+        #     for i in tqdm(range(len(start_times))):
+        #         t_start = start_times[i]
+        #         t_end = t_start + seq_len
+        #         data_i = dataset[(dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]
+        #         if len(data_i) < min_len:
+        #                 break
+        #         controller_data_i = dataset[(dataset['ts'] >= t_start) & (dataset['d_type'] == 'controller')]
+        #         target_i = []
+        #         for j in range(len(pred_len)):
+        #             pred_len_j = pred_len[j]
+        #             t_pred_end_j = t_end + pred_len_j
+        #             target_i_j = controller_data[
+        #                     (controller_data['ts'] < t_pred_end_j) & (controller_data['ts'] >= t_end)]
+        #             target_i.append(target_i_j)
+        #         data['data'].append(data_i)
+        #         data['target'].append(target_i)
+        #     return data, start_times

@@ -41,7 +41,7 @@ class Tokenizer:
 
     def __call__(self, input, window_length, max_length=None, padding=False, truncation=False, return_tensors='pt'):
         seq_len = [len(input[i]['d_value']) for i in range(len(input))]
-        window_length = window_length / self.normalization
+        normalization = window_length / self.normalization
         if max_length == 'longest':
             max_length = max(seq_len)
         data = []
@@ -51,7 +51,7 @@ class Tokenizer:
             ts_i = input_i['ts_normalized']
             if len(ts_i) > 0:
                 ts_start_i = ts_i[0]
-                ts_i = [0] + (np.diff(ts_i) / window_length).tolist()
+                ts_i = [0] + (np.diff(ts_i) / normalization).tolist()
                 ts_start_i = [ts_start_i] * len(ts_i)
             else:
                 ts_start_i = []
