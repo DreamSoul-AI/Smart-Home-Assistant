@@ -67,6 +67,8 @@ class SmartHome(Dataset):
         index_ = index if subset_index == 0 else index - self.length[subset_index - 1]
         subset = self.subset[subset_index]
         input = {k: self.data[subset][k][index_] for k in self.data[subset]}
+        print(input)
+        exit()
         if self.transform is not None:
             input = self.transform(input)
         return input
@@ -85,17 +87,17 @@ class SmartHome(Dataset):
 
     def process(self):
         self.configure()
-        # if not check_exists(self.raw_folder):  # 当root\raw文件夹不存在时，抛出报错
-        #     self.download()
+        if not check_exists(self.raw_folder):  # 当root\raw文件夹不存在时，抛出报错
+            self.download()
         for subset in self.subset:
             room_set, year_set = subset.split('~')
             data_path = os.path.join(self.processed_folder, room_set, year_set, self.configuration)  # 数据子集路径
             print(f'data_path: {data_path}')
-            if not check_exists(data_path):  # 如果子集路径不存在，建立子集路径
-                makedir_exist_ok(data_path)
-                train_set, test_set = self.make_data(room_set, year_set)
-                save(train_set, os.path.join(data_path, 'train'))
-                save(test_set, os.path.join(data_path, 'test'))
+            # if not check_exists(data_path):  # 如果子集路径不存在，建立子集路径
+            makedir_exist_ok(data_path)
+            train_set, test_set = self.make_data(room_set, year_set)
+            save(train_set, os.path.join(data_path, 'train'))
+            save(test_set, os.path.join(data_path, 'test'))
         self.data, self.meta = self.load_data()
         return
 
@@ -122,7 +124,7 @@ class SmartHome(Dataset):
     def make_data(self, room_set, year_set):
         print('----------------make_data ({}, {})-------------------'.format(room_set, year_set))
         data = pd.read_csv(os.path.join(self.raw_folder, room_set, 'data_{}.csv'.format(year_set)), delimiter=',')
-        subset_ratio = 0.1  # make it small for test
+        subset_ratio = 0.01  # make it small for test
         split_index = int(subset_ratio * len(data))
         data = data[:split_index]
         env_path = os.path.join(self.raw_folder, room_set, 'env.csv')
@@ -137,7 +139,7 @@ class SmartHome(Dataset):
         # Normalization
         time_start = data['ts'].iloc[0]
         time_end = data['ts'].iloc[-1]
-        time_range = time_end - time_start
+        time_range = time_end - time_start # why not a year?
         data['ts_normalized'] = (data['ts'] - time_start) / time_range
 
         data.loc[data['d_func'] == 'lamp', 'd_value'] = data.loc[data['d_func'] == 'lamp', 'd_value'] / 100.0
@@ -145,7 +147,7 @@ class SmartHome(Dataset):
         data.loc[data['d_func'] == 'temperature', 'd_value'] = data.loc[
                                                                    data['d_func'] == 'temperature', 'd_value'] / 50.0
 
-        split_ratio = 0.9
+        split_ratio = 0.9 # need to change this
         split_index = int(split_ratio * len(data))
         train_data = data[:split_index]
         test_data = data[split_index:]
@@ -170,11 +172,10 @@ class SmartHome(Dataset):
 
     def process_chunk(self, chunk_args):
         chunk, seq_len, min_len, pred_len, controller_data, dataset = chunk_args  # 读取元组数据
-        data = {'data': [], 'target': []}
+        data = {'data': [], 'target': [], 'ts_start': []}
         for t_start in tqdm(chunk, desc="Processing chunk", leave=False):  # 遍历chunk中的start_times
             t_end = t_start + seq_len
-            data_i = dataset[
-                (dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]  # 以t_start为起点，t_end为终点，在dataset中获取data_i
+            data_i = dataset[(dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]  # 以t_start为起点，t_end为终点，在dataset中获取data_i
             if len(data_i) < min_len:  # data_i小于最小长度时结束处理
                 continue
             target_i = []
@@ -185,6 +186,7 @@ class SmartHome(Dataset):
                                              (controller_data[
                                                   'ts'] >= t_end)]  # 以t_end为起点，t_pred_end_j为终点，在controller_data中获取target_i_j，即在预测范围内的controller_data数据
                 target_i.append(target_i_j)
+            data['t_start'].append(t_start)
             data['data'].append(data_i)  # 每个序列数据
             data['target'].extend(target_i)  # 每个序列后预测范围内的controller_data数据
         return data
@@ -194,7 +196,7 @@ class SmartHome(Dataset):
         hop_len = pd.Timedelta(seconds=self.hop_len)  # 跳跃长度
         min_len = self.min_len  # 最小长度
         pred_len = [pd.Timedelta(seconds=p) for p in self.pred_len]  # 预测长度列表，可包含多个预测长度
-        start_times = pd.date_range(start=dataset.iloc[0]['ts'], end=dataset.iloc[-1]['ts'] - seq_len,
+        start_times = pd.date_range(start=dataset.iloc[0]['ts_normalized'], end=dataset.iloc[-1]['ts_normalized'] - seq_len,
                                     freq=hop_len)  # 以第一个时间为起点，以300秒为间隔，获取开始时间列表
 
         # print(dataset['d_type'].unique())
@@ -211,39 +213,40 @@ class SmartHome(Dataset):
                                 total=len(chunks)))  # 将args传递给self.process_chunk函数在一个池中的独立进程上并行处理，处理结果保存到列表results中
 
         # Combine results
-        data = {'data': [], 'target': []}
+        data = {'data': [], 'target': [], 't_start': []}
         for result in results:
             data['data'].extend(result['data'])
             data['target'].extend(result['target'])
+            data['t_start'].extend(result['t_start'])
         return data, start_times
 
 
-        # def batchify(self, dataset):
-        #     from tqdm import tqdm
-        #     seq_len = pd.Timedelta(seconds=self.seq_len)
-        #     hop_len = pd.Timedelta(seconds=self.hop_len)
-        #     min_len = self.min_len
-        #     pred_len = []
-        #     for i in range(len(self.pred_len)):
-        #         pred_len.append(pd.Timedelta(seconds=self.pred_len[i]))
-        #     start_times = pd.date_range(start=dataset.iloc[0]['ts'],
-        #                                 end=dataset.iloc[-1]['ts'] - seq_len, freq=hop_len)
-        #     controller_data = dataset[dataset['d_type'] == 'controller']
-        #     data = {'data': [], 'target': []}
-        #     for i in tqdm(range(len(start_times))):
-        #         t_start = start_times[i]
-        #         t_end = t_start + seq_len
-        #         data_i = dataset[(dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]
-        #         if len(data_i) < min_len:
-        #                 break
-        #         controller_data_i = dataset[(dataset['ts'] >= t_start) & (dataset['d_type'] == 'controller')]
-        #         target_i = []
-        #         for j in range(len(pred_len)):
-        #             pred_len_j = pred_len[j]
-        #             t_pred_end_j = t_end + pred_len_j
-        #             target_i_j = controller_data[
-        #                     (controller_data['ts'] < t_pred_end_j) & (controller_data['ts'] >= t_end)]
-        #             target_i.append(target_i_j)
-        #         data['data'].append(data_i)
-        #         data['target'].append(target_i)
-        #     return data, start_times
+    # def batchify(self, dataset):
+    #     from tqdm import tqdm
+    #     seq_len = pd.Timedelta(seconds=self.seq_len)
+    #     hop_len = pd.Timedelta(seconds=self.hop_len)
+    #     min_len = self.min_len
+    #     pred_len = []
+    #     for i in range(len(self.pred_len)):
+    #         pred_len.append(pd.Timedelta(seconds=self.pred_len[i]))
+    #     start_times = pd.date_range(start=dataset.iloc[0]['ts'],
+    #                                 end=dataset.iloc[-1]['ts'] - seq_len, freq=hop_len)
+    #     controller_data = dataset[dataset['d_type'] == 'controller']
+    #     data = {'data': [], 'target': [], 't_start': []}
+    #     for i in tqdm(range(len(start_times))):
+    #         t_start = start_times[i]
+    #         t_end = t_start + seq_len
+    #         data_i = dataset[(dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]
+    #         if len(data_i) < min_len:
+    #                 break
+    #         target_i = []
+    #         for j in range(len(pred_len)):
+    #             pred_len_j = pred_len[j]
+    #             t_pred_end_j = t_end + pred_len_j
+    #             target_i_j = controller_data[
+    #                     (controller_data['ts'] < t_pred_end_j) & (controller_data['ts'] >= t_end)]
+    #             target_i.append(target_i_j)
+    #         data['t_start'].append(t_start)
+    #         data['data'].append(data_i)
+    #         data['target'].append(target_i)
+    #     return data, start_times
