@@ -124,14 +124,13 @@ def process_dataset(dataset, tokenizer):
     window_length = dataset['train'].seq_len
 
     def preprocess_function(examples):
-        print(examples['data'])
-        exit()
         data = examples['data']
         target = examples['target']
         data = tokenizer(data, window_length=window_length, max_length=max_length, padding=True, truncation=True,
                          return_tensors='pt')
         target = tokenizer(target, window_length=window_length, max_length=1, padding=True, truncation=True,
                            return_tensors='pt')
+        exit()
         normalization = window_length / tokenizer.normalization
         target_normalization = dataset['train'].pred_len[0] / tokenizer.normalization
         mask = target['attention_mask']
