@@ -40,30 +40,33 @@ class Tokenizer:
         return
 
     def __call__(self, input, window_length, max_length=None, padding=False, truncation=False, return_tensors='pt'):
-        seq_len = [len(input[i]['d_value']) for i in range(len(input))]
-        normalization = window_length / self.normalization
+        data_seq_len = [len(input['data'][i]['d_value']) for i in range(len(input['data']))]
+        target_seq_len = [len(input['target'][i]['d_value']) for i in range(len(input['target']))]
         if max_length == 'longest':
-            max_length = max(seq_len)
+            max_length = max(data_seq_len)
         data = []
         attention_mask = []
-        for i in range(len(input)):
-            input_i = input[i]
-            ts_i = input_i['ts_normalized']
-            if len(ts_i) > 0:
-                ts_start_i = ts_i[0]
-                ts_i = [0] + (np.diff(ts_i) / normalization).tolist()
-                ts_start_i = [ts_start_i] * len(ts_i)
-            else:
-                ts_start_i = []
-            d_value_i = input_i['d_value']
-            d_info_i = self.tokenize(input_i)
+        for i in range(len(input['data'])):
+            input_data_i = input['data'][i]
+            input_target_i = input['target'][i]
+            t_start_i = input['t_start'][i]
+            ts_i = input_data_i['ts']
+            ts_i = np.diff(ts_i)
+            ts_i = np.array([x.total_seconds() for x in ts_i]) / window_length
+            init_time = t_start_i.replace(month=1, day=1, hour=0, minute=0, second=0)
+            ts_start_i = np.array([(t_start_i - init_time).total_seconds()] * len(ts_i)) / self.normalization
+            d_value_i = input_data_i['d_value']
+            d_info_i = self.tokenize(input_data_i)
             d_info_i = [self.convert_token_to_id(d_info_i[j]) for j in range(len(d_info_i))]
-            if truncation and max_length is not None and max_length < seq_len[i]:
+            if truncation and max_length is not None and max_length < data_seq_len[i]:
                 ts_start_i = ts_start_i[:max_length]
                 ts_i = ts_i[:max_length]
                 d_value_i = d_value_i[:max_length]
                 d_info_i = d_info_i[:max_length]
-                seq_len[i] = len(d_value_i)
+                data_seq_len[i] = len(d_value_i)
+
+
+
             if padding and max_length is not None and max_length > seq_len[i]:
                 pad_width = max_length - seq_len[i]
                 if self.padding_direction == 'right':

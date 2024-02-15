@@ -124,27 +124,10 @@ def process_dataset(dataset, tokenizer):
     window_length = dataset['train'].seq_len
 
     def preprocess_function(examples):
-        data = examples['data']
-        target = examples['target']
-        data = tokenizer(data, window_length=window_length, max_length=max_length, padding=True, truncation=True,
+        data = tokenizer(examples, window_length=window_length, max_length=max_length, padding=True, truncation=True,
                          return_tensors='pt')
-        target = tokenizer(target, window_length=window_length, max_length=1, padding=True, truncation=True,
-                           return_tensors='pt')
+        model_inputs = {'data': data['data'], 'attention_mask': data['attention_mask']}
         exit()
-        normalization = window_length / tokenizer.normalization
-        target_normalization = dataset['train'].pred_len[0] / tokenizer.normalization
-        mask = target['attention_mask']
-        ts_start, ts = target['data'][..., 0], target['data'][..., 1]
-        data_ts_start = data['data'][:, [0], 0]
-        ts[mask] = ts_start[mask] + ts[mask] * normalization - window_length
-        ts[mask] = ts[mask] / target_normalization
-        print(ts[mask])
-        exit()
-
-
-        print(ts[mask])
-        exit()
-        model_inputs = {'data': data['data'], 'attention_mask': data['attention_mask'], 'target': target['data']}
         return model_inputs
 
     processed_dataset = {}

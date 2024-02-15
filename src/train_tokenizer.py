@@ -39,13 +39,13 @@ def runExperiment():
     tokenizer.train(True)
 
     # ------------------------------------------------------------
-    if os.path.exists(cfg['env_path']):
-        env = pd.read_csv(cfg['env_path'], delimiter=',')
-        env = env[env['level'] != 1]
-        tokenizer.tokenize(env)
-    else:
-        dataset = make_dataset(cfg['data_name'], cfg['subset_name'])
-        dataset = process_dataset(dataset, tokenizer)
+    # if os.path.exists(cfg['env_path']):
+    #     env = pd.read_csv(cfg['env_path'], delimiter=',')
+    #     env = env[env['level'] != 1]
+    #     tokenizer.tokenize(env)
+    # else:
+    dataset = make_dataset(cfg['data_name'], cfg['subset_name'])
+    dataset = process_dataset(dataset, tokenizer)
     # ------------------------------------------------------------
 
     tokenizer.train(False)
