@@ -15,7 +15,7 @@ def process_control():
     cfg['num_epochs'] = 200
     cfg['collate_mode'] = 'dict'
     cfg['embedding_size'] = 768 + 2
-    cfg['max_length'] = 128
+    cfg['max_length'] = 512
     cfg['base_model_name'] = 'ar'
 
     cfg['model'] = {}

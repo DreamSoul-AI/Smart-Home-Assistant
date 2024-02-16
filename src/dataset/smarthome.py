@@ -12,7 +12,7 @@ from module import check_exists, makedir_exist_ok, save, load
 class SmartHome(Dataset):
     data_name = 'SmartHome'
 
-    def __init__(self, root, split, subset, seq_len=1200, hop_len=300, pred_len=300, min_len=2):
+    def __init__(self, root, split, subset, seq_len=1200, hop_len=300, pred_len=300, min_len=1):
         self.root = os.path.expanduser(root)  # 替换root中的~为当前系统的用户目录***
         self.split = split
         self.transform = None
@@ -145,13 +145,6 @@ class SmartHome(Dataset):
 
         data['ts'] = pd.to_datetime(data['ts'])
 
-        # Normalization
-        # time_start = data['ts'].iloc[0].replace(month=1, day=1, hour=0, minute=0, second=0)
-        # print(time_start, data['ts'].iloc[0])
-        # data['ts_normalized'] = data['ts'] - time_start
-        # print(data['ts_normalized'])
-        # exit()
-
         data.loc[data['d_func'] == 'lamp', 'd_value'] = data.loc[data['d_func'] == 'lamp', 'd_value'] / 100.0
         data.loc[data['d_func'] == 'light', 'd_value'] = data.loc[data['d_func'] == 'light', 'd_value'] / 100.0
         data.loc[data['d_func'] == 'temperature', 'd_value'] = data.loc[
@@ -181,7 +174,8 @@ class SmartHome(Dataset):
         return (train_data, train_meta), (test_data, test_meta)
 
     def process_chunk(self, chunk_args):
-        chunk, seq_len, min_len, pred_len, controller_data, dataset = chunk_args  # 读取元组数据
+        chunk, seq_len, min_len, pred_len, dataset = chunk_args  # 读取元组数据
+        controller_data = dataset[dataset['d_type'] == 'controller']
         data = {'data': [], 'target': [], 't_start': []}
         for t_start in tqdm(chunk, desc="Processing chunk", leave=False):  # 遍历chunk中的start_times
             t_end = t_start + seq_len
@@ -194,7 +188,7 @@ class SmartHome(Dataset):
                                                                                    'ts'] >= t_end)]  # 以t_end为起点，t_pred_end_j为终点，在controller_data中获取target_i_j，即在预测范围内的controller_data数据
             data['t_start'].append(t_start)
             data['data'].append(data_i)  # 每个序列数据
-            data['target'].extend(target_i)  # 每个序列后预测范围内的controller_data数据
+            data['target'].append(target_i)  # 每个序列后预测范围内的controller_data数据
         return data
 
     def batchify(self, dataset):
@@ -206,12 +200,12 @@ class SmartHome(Dataset):
                                     freq=hop_len)  # 以第一个时间为起点，以300秒为间隔，获取开始时间列表
 
         # print(dataset['d_type'].unique())
-        controller_data = dataset[dataset['d_type'] == 'controller']  # 控制器数据
+         # 控制器数据
 
         # Split start_times into chunks
         n_chunks = 4  # Number of chunks, can be adjusted
         chunks = np.array_split(start_times, n_chunks)  # 将start_timies平均切割为4份
-        args = [(chunk, seq_len, min_len, pred_len, controller_data, dataset) for chunk in
+        args = [(chunk, seq_len, min_len, pred_len, dataset) for chunk in
                 chunks]  # 将每份数据chunk、序列长度、最小长度、预测长度、全部控制器数据、全部数据组成元组，将各元组以列表形式保存到args中
 
         with Pool() as pool:

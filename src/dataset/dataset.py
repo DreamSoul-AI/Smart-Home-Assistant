@@ -127,7 +127,6 @@ def process_dataset(dataset, tokenizer):
         data = tokenizer(examples, window_length=window_length, max_length=max_length, padding=True, truncation=True,
                          return_tensors='pt')
         model_inputs = {'data': data['data'], 'attention_mask': data['attention_mask']}
-        exit()
         return model_inputs
 
     processed_dataset = {}
