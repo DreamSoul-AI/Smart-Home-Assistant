@@ -1,3 +1,4 @@
+import calendar
 import numpy as np
 import torch
 
@@ -17,17 +18,17 @@ class Tokenizer:
         for i in range(len(self.special_token)):
             self.update(self.special_token[i])
 
-    @property
-    def normalization(self):
-        # Constants
-        days_per_year = 366
-        hours_per_day = 24
-        minutes_per_hour = 60
-        seconds_per_minute = 60
-
-        # Calculation
-        seconds_per_year = days_per_year * hours_per_day * minutes_per_hour * seconds_per_minute
-        return seconds_per_year
+    def normalize(self, dt):
+        start_of_year = dt.replace(month=1, day=1, hour=0, minute=0, second=0)
+        # Calculate the total seconds since the beginning of the year
+        seconds_since_start_of_year = (dt - start_of_year).total_seconds()
+        # Check if the year is a leap year
+        is_leap_year = calendar.isleap(dt.year)
+        # Total seconds in a year (consider leap year)
+        total_seconds_in_year = (366 if is_leap_year else 365) * 24 * 60 * 60
+        # Normalize the seconds within one year
+        normalized_seconds = seconds_since_start_of_year / total_seconds_in_year
+        return normalized_seconds
 
     def update(self, token):
         if token not in self.vocab:
@@ -41,29 +42,20 @@ class Tokenizer:
 
     def __call__(self, input, window_length, max_length=None, padding=False, truncation=False, return_tensors='pt'):
         seq_len = [len(input['data'][i]['d_value']) for i in range(len(input['data']))]
-        # target_seq_len = [len(input['target'][i]['d_value']) for i in range(len(input['target']))]
         if max_length == 'longest':
             max_length = max(seq_len)
         data = []
         attention_mask = []
         for i in range(len(input['data'])):
             input_data_i = input['data'][i]
-            # input_target_i = input['target'][i]
             t_start_i = input['t_start'][i]
-
-            init_time = t_start_i.replace(month=1, day=1, hour=0, minute=0, second=0)
-            ts_start_i = (t_start_i - init_time).total_seconds() / self.normalization
-
-            ts_i = [t_start_i] + input_data_i['ts']
-            ts_i = np.diff(ts_i)
+            ts_start_i = self.normalize(t_start_i)
+            ts_i = np.array(input_data_i['ts']) - t_start_i
             ts_i = np.array([ts_start_i] + [x.total_seconds() / window_length for x in ts_i])
 
             d_value_i = [0] + input_data_i['d_value']
             d_info_i = self.encode([self.unk_token]) + self.encode(self.tokenize(input_data_i))
             seq_len[i] = seq_len[i] + 1
-
-            # target_d_value_i = input_target_i['d_value']
-            # target_d_info_i = self.encode(self.tokenize(input_target_i))
 
             if truncation and max_length is not None and max_length < seq_len[i]:
                 ts_i = ts_i[:max_length]
