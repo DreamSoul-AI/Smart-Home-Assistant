@@ -35,7 +35,7 @@ class MLP(nn.Module):
     def f(self, x):
         x = self.feature(x)
         x = self.classify(x)
-        return output
+        return x
 
     def forward(self, input):
         output = {}

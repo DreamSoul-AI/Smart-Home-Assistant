@@ -143,6 +143,7 @@ def process_dataset(dataset, tokenizer):
             num_proc=1,
             load_from_cache_file=False,
             desc="Preprocess dataset",
+            remove_columns=["t_start"],
             batch_size=50,
         )
 

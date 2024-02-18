@@ -12,7 +12,7 @@ from module import check_exists, makedir_exist_ok, save, load
 class SmartHome(Dataset):
     data_name = 'SmartHome'
 
-    def __init__(self, root, split, subset, seq_len=1200, hop_len=300, min_len=1):
+    def __init__(self, root, split, subset, seq_len=1200, hop_len=300, min_len=1, reprocess=False):
         self.root = os.path.expanduser(root)  # 替换root中的~为当前系统的用户目录***
         self.split = split
         self.transform = None
@@ -20,6 +20,7 @@ class SmartHome(Dataset):
         self.seq_len = seq_len
         self.hop_len = hop_len
         self.min_len = min_len
+        self.reprocess = reprocess
         self.process()
         self.other = {}
 
@@ -86,7 +87,7 @@ class SmartHome(Dataset):
             room_set, year_set = subset.split('~')
             data_path = os.path.join(self.processed_folder, room_set, year_set, self.configuration)  # 数据子集路径
             print(f'data_path: {data_path}')
-            if not check_exists(data_path):  # 如果子集路径不存在，建立子集路径
+            if not check_exists(data_path) or self.reprocess:  # 如果子集路径不存在，建立子集路径
                 makedir_exist_ok(data_path)
                 train_set, test_set = self.make_data(room_set, year_set)
                 save(train_set, os.path.join(data_path, 'train'))
@@ -117,7 +118,7 @@ class SmartHome(Dataset):
     def make_data(self, room_set, year_set):
         print('----------------make_data ({}, {})-------------------'.format(room_set, year_set))
         data = pd.read_csv(os.path.join(self.raw_folder, room_set, 'data_{}.csv'.format(year_set)), delimiter=',')
-        subset_ratio = 0.1  # make it small for test
+        subset_ratio = 0.01  # make it small for test
         split_index = int(subset_ratio * len(data))
         data = data[:split_index]
         env_path = os.path.join(self.raw_folder, room_set, 'env.csv')
