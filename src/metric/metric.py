@@ -44,21 +44,21 @@ def MSE(output, target):
 
 def mse_ts(output, target, mask):
     output_ts = output[:, 0]
-    target_ts = target[:, 1:, 1][mask[:, 1:]]
+    target_ts = target[:, 1:, 0][mask[:, 1:]]
     mse = F.mse_loss(output_ts, target_ts, reduction='mean').item()
     return mse
 
 
 def mse_d_value(output, target, mask):
     output_d_value = output[:, 1]
-    target_d_value = target[:, 1:, 2][mask[:, 1:]]
+    target_d_value = target[:, 1:, 1][mask[:, 1:]]
     mse = F.mse_loss(output_d_value, target_d_value, reduction='mean').item()
     return mse
 
 
 def acc_d_info(output, target, mask):
     output_d_info = output[:, 2]
-    target_d_info = target[:, 1:, 3][mask[:, 1:]]
+    target_d_info = target[:, 1:, 2][mask[:, 1:]]
     acc = (output_d_info == target_d_info).float().mean().item()
     return acc
 
