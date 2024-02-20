@@ -18,7 +18,9 @@ def make_metric(split, **kwargs):
         best_direction = 'down'
         best_metric_name = 'Loss'
         for k in metric_name:
-            metric_name[k].extend(['Loss', 'MSE-ar-ts', 'MSE-ar-d~value', 'Accuracy-ar-d~info'])
+            metric_name[k].extend(
+                ['Loss', 'MSE-ts', 'MSE-d~value', 'Accuracy-d~info', 'MSE-control-ts', 'MSE-control-d~value',
+                 'Accuracy-control-d~info'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, best, best_direction, best_metric_name)
@@ -42,22 +44,40 @@ def MSE(output, target):
     return mse
 
 
-def mse_ts(output, target, mask):
-    output_ts = output[:, 0]
+def mse_ts(output, target, attention_mask, control_mask=None):
+    if control_mask is not None:
+        mask = torch.logical_and(attention_mask, control_mask)
+        if not torch.any(mask):
+            return None
+    else:
+        mask = attention_mask
+    output_ts = output[:, :, 0][mask[:, 1:]]
     target_ts = target[:, 1:, 0][mask[:, 1:]]
     mse = F.mse_loss(output_ts, target_ts, reduction='mean').item()
     return mse
 
 
-def mse_d_value(output, target, mask):
-    output_d_value = output[:, 1]
+def mse_d_value(output, target, attention_mask, control_mask=None):
+    if control_mask is not None:
+        mask = torch.logical_and(attention_mask, control_mask)
+        if not torch.any(mask):
+            return None
+    else:
+        mask = attention_mask
+    output_d_value = output[:, :, 1][mask[:, 1:]]
     target_d_value = target[:, 1:, 1][mask[:, 1:]]
     mse = F.mse_loss(output_d_value, target_d_value, reduction='mean').item()
     return mse
 
 
-def acc_d_info(output, target, mask):
-    output_d_info = output[:, 2]
+def acc_d_info(output, target, attention_mask, control_mask=None):
+    if control_mask is not None:
+        mask = torch.logical_and(attention_mask, control_mask)
+        if not torch.any(mask):
+            return None
+    else:
+        mask = attention_mask
+    output_d_info = output[:, :, 2][mask[:, 1:]]
     target_d_info = target[:, 1:, 2][mask[:, 1:]]
     acc = (output_d_info == target_d_info).float().mean().item()
     return acc
@@ -75,21 +95,39 @@ class Metric:
             for m in metric_name[split]:
                 if m == 'Loss':
                     metric[split][m] = {'mode': 'batch', 'metric': (lambda input, output: output['loss'].item())}
-                elif m == 'MSE-ar-ts':
+                elif m == 'MSE-ts':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
                                             lambda input, output: recur(mse_ts, output['target'], input['data'],
                                                                         input['attention_mask']))}
-                elif m == 'MSE-ar-d~value':
+                elif m == 'MSE-d~value':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
                                             lambda input, output: recur(mse_d_value, output['target'], input['data'],
                                                                         input['attention_mask']))}
-                elif m == 'Accuracy-ar-d~info':
+                elif m == 'Accuracy-d~info':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
                                             lambda input, output: recur(acc_d_info, output['target'], input['data'],
                                                                         input['attention_mask']))}
+                elif m == 'MSE-control-ts':
+                    metric[split][m] = {'mode': 'batch',
+                                        'metric': (
+                                            lambda input, output: recur(mse_ts, output['target'], input['data'],
+                                                                        input['attention_mask'],
+                                                                        input['control_mask']))}
+                elif m == 'MSE-control-d~value':
+                    metric[split][m] = {'mode': 'batch',
+                                        'metric': (
+                                            lambda input, output: recur(mse_d_value, output['target'], input['data'],
+                                                                        input['attention_mask'],
+                                                                        input['control_mask']))}
+                elif m == 'Accuracy-control-d~info':
+                    metric[split][m] = {'mode': 'batch',
+                                        'metric': (
+                                            lambda input, output: recur(acc_d_info, output['target'], input['data'],
+                                                                        input['attention_mask'],
+                                                                        input['control_mask']))}
                 else:
                     raise ValueError('Not valid metric name')
         return metric

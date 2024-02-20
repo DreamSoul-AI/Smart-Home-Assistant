@@ -65,6 +65,7 @@ class Base(nn.Module):
 
         x_info = x_info @ self.info_embedding.weight.t()
         x_info = x_info / torch.linalg.norm(self.info_embedding.weight.t(), dim=0)
+        x_info = x_info.transpose(1, 2)
 
         x_target = x_target[:, 1:]
         x_info_target = x_info_target[:, 1:]
@@ -72,21 +73,21 @@ class Base(nn.Module):
         x_ts_target = x_target[..., 0]
         x_value_target = x_target[..., 1]
 
-        x_ts = x_ts[mask]
-        x_ts_target = x_ts_target[mask]
-        x_value = x_value[mask]
-        x_value_target = x_value_target[mask]
-        x_info = x_info.transpose(1, 2)
+        # x_ts = x_ts[mask]
+        # x_value = x_value[mask]
+        # x_ts_target = x_ts_target[mask]
+        # x_value_target = x_value_target[mask]
         x_info_target[~mask] = -100
 
         num_loss = mask.float().sum()
-        ts_loss = F.mse_loss(x_ts, x_ts_target, reduction='sum') / num_loss
-        value_loss = F.mse_loss(x_value, x_value_target, reduction='sum') / num_loss
+        ts_loss = F.mse_loss(x_ts[mask], x_ts_target[mask], reduction='sum') / num_loss
+        value_loss = F.mse_loss(x_value[mask], x_value_target[mask], reduction='sum') / num_loss
         info_loss = F.cross_entropy(x_info, x_info_target, reduction='sum') / num_loss
         loss = ts_loss + value_loss + info_loss
         output['loss'] = loss
 
-        x_info = torch.argmax(x_info, dim=1)[mask].float()
+        # x_info = torch.argmax(x_info, dim=1)[mask].float()
+        x_info = torch.argmax(x_info, dim=1).float()
         output['target'] = torch.stack([x_ts, x_value, x_info], dim=-1)
         return output
 

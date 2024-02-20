@@ -126,7 +126,8 @@ def process_dataset(dataset, tokenizer):
     def preprocess_function(examples):
         data = tokenizer(examples, window_length=window_length, max_length=max_length, padding=True, truncation=True,
                          return_tensors='pt')
-        model_inputs = {'data': data['data'], 'attention_mask': data['attention_mask']}
+        model_inputs = {'data': data['data'], 'attention_mask': data['attention_mask'],
+                        'control_mask': data['control_mask']}
         return model_inputs
 
     processed_dataset = {}
@@ -142,8 +143,8 @@ def process_dataset(dataset, tokenizer):
             batched=True,
             num_proc=1,
             load_from_cache_file=False,
-            desc="Preprocess dataset",
-            remove_columns=["t_start"],
+            desc='Preprocess dataset',
+            remove_columns=['t_start'],
             batch_size=50,
         )
 

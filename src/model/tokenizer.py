@@ -46,6 +46,7 @@ class Tokenizer:
             max_length = max(seq_len)
         data = []
         attention_mask = []
+        control_mask = []
         for i in range(len(input['data'])):
             input_data_i = input['data'][i]
             t_start_i = input['t_start'][i]
@@ -56,6 +57,7 @@ class Tokenizer:
             d_value_i = [0] + input_data_i['d_value']
             d_info_i = self.encode([self.unk_token]) + self.encode(self.tokenize(input_data_i))
             seq_len[i] = seq_len[i] + 1
+            control_mask_i = [False] + [dtype == 'control' for dtype in input_data_i['d_type']]
 
             if truncation and max_length is not None and max_length < seq_len[i]:
                 ts_i = ts_i[:max_length]
@@ -70,13 +72,15 @@ class Tokenizer:
                     d_value_i = np.pad(d_value_i, (0, pad_width), mode='constant', constant_values=0).tolist()
                     d_info_i = np.pad(d_info_i, (0, pad_width), mode='constant',
                                       constant_values=self.convert_token_to_id(self.pad_token)).tolist()
-                    attention_mask_i = [1] * seq_len[i] + [0] * pad_width
+                    attention_mask_i = [True] * seq_len[i] + [False] * pad_width
+                    control_mask_i = control_mask_i + [False] * pad_width
                 elif self.padding_direction == 'left':
                     ts_i = np.pad(ts_i, (pad_width, 0), mode='constant', constant_values=0).tolist()
                     d_value_i = np.pad(d_value_i, (pad_width, 0), mode='constant', constant_values=0).tolist()
                     d_info_i = np.pad(d_info_i, (pad_width, 0), mode='constant',
                                       constant_values=self.convert_token_to_id(self.pad_token)).tolist()
-                    attention_mask_i = [0] * pad_width + [1] * seq_len[i]
+                    attention_mask_i = [False] * pad_width + [True] * seq_len[i]
+                    control_mask_i = [False] * pad_width + control_mask_i
                 else:
                     raise ValueError('Not valid padding direction')
             else:
@@ -84,15 +88,18 @@ class Tokenizer:
             data_i = np.array([ts_i, d_value_i, d_info_i]).transpose().tolist()
             data.append(data_i)
             attention_mask.append(attention_mask_i)
+            control_mask.append(control_mask_i)
         if return_tensors == 'np':
             data = np.array(data, dtype=np.float32)
             attention_mask = np.array(attention_mask, dtype=bool)
+            control_mask = np.array(control_mask, dtype=bool)
         elif return_tensors == 'pt':
             data = torch.tensor(data, dtype=torch.float32)
             attention_mask = torch.tensor(attention_mask, dtype=torch.bool)
+            control_mask = torch.tensor(control_mask, dtype=torch.bool)
         else:
             raise ValueError('Not valid return tensor')
-        output = {'data': data, 'attention_mask': attention_mask}
+        output = {'data': data, 'attention_mask': attention_mask, 'control_mask': control_mask}
         return output
 
     def tokenize(self, data):
