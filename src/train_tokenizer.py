@@ -29,6 +29,7 @@ def main():
 
 
 def runExperiment():
+    reprocess = False
     cfg['seed'] = int(cfg['tag'].split('_')[0])
     torch.manual_seed(cfg['seed'])
     torch.cuda.manual_seed(cfg['seed'])
@@ -39,7 +40,7 @@ def runExperiment():
     tokenizer.train(True)
 
     # ------------------------------------------------------------
-    if os.path.exists(cfg['env_path']):
+    if os.path.exists(cfg['env_path']) and not reprocess:
         env = pd.read_csv(cfg['env_path'], delimiter=',')
         env = env[env['level'] != 1]
         tokenizer.tokenize(env)

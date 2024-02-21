@@ -62,7 +62,7 @@ class SmartHome(Dataset):
         subset_index = bisect.bisect_left(self.length, index + 1)
         index_ = index if subset_index == 0 else index - self.length[subset_index - 1]
         subset = self.subset[subset_index]
-        input = {k: self.data[subset][k][index_] for k in self.data[subset]}
+        input = {'data': self.data[subset]['data'][index_], 't_start': self.data[subset]['t_start'][index_]}
         if self.transform is not None:
             input = self.transform(input)
         return input
@@ -89,9 +89,10 @@ class SmartHome(Dataset):
             print(f'data_path: {data_path}')
             if not check_exists(data_path) or self.reprocess:  # 如果子集路径不存在，建立子集路径
                 makedir_exist_ok(data_path)
-                train_set, test_set = self.make_data(room_set, year_set)
+                train_set, test_set, meta = self.make_data(room_set, year_set)
                 save(train_set, os.path.join(data_path, 'train'))
                 save(test_set, os.path.join(data_path, 'test'))
+                save(train_set, os.path.join(data_path, 'meta'))
         self.data, self.meta = self.load_data()
         return
 
@@ -104,9 +105,11 @@ class SmartHome(Dataset):
         length = 0
         for subset in self.subset:
             room_set, year_set = subset.split('~')
-            data[subset], meta[subset] = load(os.path.join(self.processed_folder, room_set, year_set,
-                                                           self.configuration, self.split))
-            length += len(data[subset]['data'])
+            data[subset] = load(os.path.join(self.processed_folder, room_set, year_set,
+                                             self.configuration, self.split))
+            meta[subset] = load(os.path.join(self.processed_folder, room_set, year_set,
+                                             self.configuration, 'meta'))
+            length += len(data[subset])
             self.length.append(length)
         return data, meta
 
@@ -135,28 +138,27 @@ class SmartHome(Dataset):
         data.loc[data['d_func'] == 'temperature', 'd_value'] = data.loc[
                                                                    data['d_func'] == 'temperature', 'd_value'] / 50.0
 
-        split_ratio = 0.9  # need to change this
-        split_index = int(split_ratio * len(data))
-        train_data = data[:split_index]
-        test_data = data[split_index:]
+        print(f'-----------len(data): {len(data)}')
+
+        unique_count = len(data['d_type'].unique())
+        print('Number of unique d_type in data: {}'.format(unique_count))
+
+        data = self.batchify(data)
+
+        indices = np.random.permutation(len(data['data']))
+        split_ratio = 0.9
+        split_index = int(split_ratio * len(data['data']))
+        train_indices = indices[:split_index]
+        test_indices = indices[split_index:]
+        train_data = {'data': [data['data'][i] for i in train_indices],
+                      't_start': [data['t_start'][i] for i in train_indices]}
+        test_data = {'data': [data['data'][i] for i in test_indices],
+                     't_start': [data['t_start'][i] for i in test_indices]}
 
         print(f'-----------len(train_data): {len(train_data)}')
         print(f'-----------len(test_data): {len(test_data)}')
 
-        unique_count = len(train_data['d_type'].unique())
-        print('Number of unique d_type in train_data: {}'.format(unique_count))
-        unique_count = len(test_data['d_type'].unique())
-        print('Number of unique d_type in test_data: {}'.format(unique_count))
-
-        train_data, train_start_times = self.batchify(train_data)
-        test_data, test_start_times = self.batchify(test_data)
-
-        print(f'-----------len(train_start_times): {len(train_start_times)}')
-        print(f'-----------len(test_start_times): {len(test_start_times)}')
-
-        train_meta = (train_start_times, env)
-        test_meta = (test_start_times, env)
-        return (train_data, train_meta), (test_data, test_meta)
+        return train_data, test_data, env
 
     def process_chunk(self, chunk_args):
         chunk, seq_len, min_len, dataset = chunk_args  # 读取元组数据
@@ -196,7 +198,7 @@ class SmartHome(Dataset):
         for result in results:
             data['data'].extend(result['data'])
             data['t_start'].extend(result['t_start'])
-        return data, start_times
+        return data
 
     # def batchify(self, dataset):
     #     seq_len = pd.Timedelta(seconds=self.seq_len)
@@ -213,4 +215,4 @@ class SmartHome(Dataset):
     #             continue
     #         data['t_start'].append(t_start)
     #         data['data'].append(data_i)
-    #     return data, start_times
+    #     return data
