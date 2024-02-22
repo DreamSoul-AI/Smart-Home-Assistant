@@ -10,9 +10,9 @@ def process_control():
 
     cfg['batch_size'] = 250
     cfg['step_period'] = 1
-    cfg['num_steps'] = 80000
+    cfg['num_steps'] = 800
     cfg['eval_period'] = 200
-    cfg['num_epochs'] = 200
+    cfg['num_epochs'] = 4
     cfg['collate_mode'] = 'dict'
     cfg['embedding_size'] = 768 + 2
     cfg['max_length'] = 512

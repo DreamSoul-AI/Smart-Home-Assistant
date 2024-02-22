@@ -60,9 +60,6 @@ class Base(nn.Module):
         x = x[:, :-1]
         x_ts, x_value, x_info = x[..., 0], x[..., 1], x[..., 2:]
 
-        x_ts = x_ts.clamp_(0, 1)
-        x_value = x_value.clamp_(0, 1)
-
         x_info = x_info @ self.info_embedding.weight.t()
         x_info = x_info / torch.linalg.norm(self.info_embedding.weight.t(), dim=0)
         x_info = x_info.transpose(1, 2)
@@ -73,10 +70,6 @@ class Base(nn.Module):
         x_ts_target = x_target[..., 0]
         x_value_target = x_target[..., 1]
 
-        # x_ts = x_ts[mask]
-        # x_value = x_value[mask]
-        # x_ts_target = x_ts_target[mask]
-        # x_value_target = x_value_target[mask]
         x_info_target[~mask] = -100
 
         num_loss = mask.float().sum()
@@ -86,7 +79,8 @@ class Base(nn.Module):
         loss = ts_loss + value_loss + info_loss
         output['loss'] = loss
 
-        # x_info = torch.argmax(x_info, dim=1)[mask].float()
+        x_ts = x_ts.clamp_(0, 1)
+        x_value = x_value.clamp_(0, 1)
         x_info = torch.argmax(x_info, dim=1).float()
         output['target'] = torch.stack([x_ts, x_value, x_info], dim=-1)
         return output
