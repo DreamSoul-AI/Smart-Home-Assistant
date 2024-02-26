@@ -7,7 +7,6 @@ from datasets import Dataset
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
-from transformers import default_data_collator
 from config import cfg
 
 data_stats = {'MNIST': ((0.1307,), (0.3081,)), 'FashionMNIST': ((0.2860,), (0.3530,)),

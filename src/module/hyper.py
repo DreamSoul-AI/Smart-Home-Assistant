@@ -12,7 +12,7 @@ def process_control():
     cfg['step_period'] = 1
     cfg['num_steps'] = 800
     cfg['eval_period'] = 200
-    cfg['num_epochs'] = 4
+    cfg['num_epochs'] = 10
     cfg['collate_mode'] = 'dict'
     cfg['embedding_size'] = 768 + 2
     cfg['max_length'] = 512
@@ -49,8 +49,8 @@ def process_control():
     tag = cfg['tag']
     cfg[tag] = {}
     cfg[tag]['optimizer'] = {}
-    cfg[tag]['optimizer']['optimizer_name'] = 'Adam'
-    cfg[tag]['optimizer']['lr'] = 1e-3
+    cfg[tag]['optimizer']['optimizer_name'] = 'SGD'
+    cfg[tag]['optimizer']['lr'] = 1e-2
     cfg[tag]['optimizer']['momentum'] = 0.9
     cfg[tag]['optimizer']['betas'] = (0.9, 0.999)
     cfg[tag]['optimizer']['weight_decay'] = 5e-4
