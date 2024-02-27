@@ -2,7 +2,7 @@
 # control
 control:
   data_name: SmartHome-hh105~2015
-  model_name: base
+  model_name: lstm
 # experiment
 pin_memory: True
 num_workers: 0

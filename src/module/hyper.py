@@ -27,7 +27,6 @@ def process_control():
     cfg['model']['data_shape'] = data_shape[cfg['data_name']]
     cfg['model']['target_size'] = target_size[cfg['data_name']]
     cfg['model']['embedding_size'] = cfg['embedding_size']
-    cfg['model']['core_model_name'] = 'lstm'
 
     cfg['model']['linear'] = {}
     cfg['model']['mlp'] = {'hidden_size': 128, 'scale_factor': 2, 'num_layers': 2, 'activation': 'relu'}
@@ -49,8 +48,8 @@ def process_control():
     tag = cfg['tag']
     cfg[tag] = {}
     cfg[tag]['optimizer'] = {}
-    cfg[tag]['optimizer']['optimizer_name'] = 'SGD'
-    cfg[tag]['optimizer']['lr'] = 1e-2
+    cfg[tag]['optimizer']['optimizer_name'] = 'AdamW'
+    cfg[tag]['optimizer']['lr'] = 1e-3
     cfg[tag]['optimizer']['momentum'] = 0.9
     cfg[tag]['optimizer']['betas'] = (0.9, 0.999)
     cfg[tag]['optimizer']['weight_decay'] = 5e-4

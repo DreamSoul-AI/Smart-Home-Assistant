@@ -7,18 +7,18 @@ from sentence_transformers import SentenceTransformer
 
 
 class Base(nn.Module):
-    def __init__(self, tokenizer, embedding_size, hidden_size, num_layers):
+    def __init__(self, tokenizer, embedding_size, model_name, **kwargs):
         super().__init__()
         self.tokenizer = tokenizer
+        self.model_name = model_name
         self.embedding_size = embedding_size
-        self.hidden_size = hidden_size
+        self.hidden_size = kwargs['hidden_size']
         self.text_encoder = SentenceTransformer('sentence-transformers/all-mpnet-base-v2',
                                                 cache_folder=os.path.join('output', 'model'))
         self.info_embedding = self.make_info_embedding()
-        self.encoder = nn.Linear(embedding_size, hidden_size)
-        self.core = nn.LSTM(hidden_size, hidden_size, num_layers=num_layers, bias=True, batch_first=True,
-                            dropout=0.0, bidirectional=False)
-        self.decoder = nn.Linear(hidden_size, embedding_size)
+        self.encoder = nn.Linear(self.embedding_size, self.hidden_size)
+        self.core = self.make_core(**kwargs)
+        self.decoder = nn.Linear(self.hidden_size, embedding_size)
 
     def make_info_embedding(self):
         vocab = list(self.tokenizer.vocab.keys())
@@ -30,6 +30,14 @@ class Base(nn.Module):
         embedding.weight.requires_grad = False
         return embedding
 
+    def make_core(self, **kwargs):
+        if self.model_name == 'lstm':
+            core = nn.LSTM(kwargs['hidden_size'], kwargs['hidden_size'], num_layers=kwargs['num_layers'], bias=True,
+                           batch_first=True, dropout=0.0, bidirectional=False)
+        else:
+            raise ValueError('Not valid model name')
+        return core
+
     def encode(self, x):
         x = self.encoder(x)
         return x
@@ -39,7 +47,12 @@ class Base(nn.Module):
         return x
 
     def f(self, x):
-        x, _ = self.core(x)
+        x = self.encode(x)
+        if self.model_name in ['lstm']:
+            x, _ = self.core(x)
+        else:
+            raise ValueError('Not valid model name')
+        x = self.decode(x)
         return x
 
     def forward(self, input):
@@ -53,9 +66,7 @@ class Base(nn.Module):
         x_info = x_info / torch.linalg.norm(x_info, dim=-1, keepdim=True)
         x = torch.cat([x_target, x_info], dim=-1)
 
-        x = self.encode(x)
-        x, _ = self.core(x)
-        x = self.decode(x)
+        x = self.f(x)
 
         x = x[:, :-1]
         x_ts, x_value, x_info = x[..., 0], x[..., 1], x[..., 2:]
@@ -88,9 +99,8 @@ class Base(nn.Module):
 
 def base(tokenizer, cfg):
     embedding_size = cfg['embedding_size']
-    hidden_size = cfg[cfg['core_model_name']]['hidden_size']
-    num_layers = cfg[cfg['core_model_name']]['num_layers']
-    model = Base(tokenizer, embedding_size, hidden_size, num_layers)
+    model_name = cfg['model_name']
+    model = Base(tokenizer, embedding_size, model_name, **cfg[model_name])
     model.encoder.apply(init_param)
     model.core.apply(init_param)
     model.decoder.apply(init_param)

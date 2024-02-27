@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from config import cfg
 from .model import init_param
 
 
@@ -9,20 +8,20 @@ class LSTM(nn.Module):
     def __init__(self, data_shape, hidden_size, num_layers, target_size):
         super().__init__()
         input_size = data_shape[0]
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers=num_layers, bias=True, batch_first=True,
+        self.encoder = nn.LSTM(input_size, hidden_size, num_layers=num_layers, bias=True, batch_first=True,
                             dropout=0.0, bidirectional=False)
-        self.linear = nn.Linear(hidden_size, target_size)
+        self.decoder = nn.Linear(hidden_size, target_size)
 
     def feature(self, x):
-        x = self.lstm(x)
+        x, _ = self.encoder(x)
         return x
 
     def output(self, x):
-        x = self.linear(x)
+        x = self.decoder(x)
         return x
 
     def f(self, x):
-        x, _ = self.feature(x)
+        x = self.feature(x)
         x = self.output(x)
         return x
 
@@ -39,7 +38,7 @@ class LSTM(nn.Module):
         return output
 
 
-def lstm():
+def lstm(cfg):
     data_shape = cfg['data_shape']
     hidden_size = cfg['lstm']['hidden_size']
     num_layers = cfg['lstm']['num_layers']

@@ -12,8 +12,8 @@ def make_tokenizer():
 
 
 def make_model(tokenizer, cfg):
-    model = eval('model.{}(tokenizer, cfg)'.format(cfg['model_name']))
-    return model
+    base = model.base(tokenizer, cfg)
+    return base
 
 
 def make_loss(output, input):
