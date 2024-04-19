@@ -35,7 +35,7 @@ def runExperiment():
     torch.cuda.manual_seed(cfg['seed'])
     cfg['path'] = os.path.join('output', 'exp')
     cfg['tokenizer_path'] = os.path.join(cfg['path'], 'tokenizer')
-    cfg['env_path'] = os.path.join('data', cfg['data_name'], 'raw', 'hh105', 'env.csv')
+    cfg['env_path'] = os.path.join('data', cfg['data_name'], 'raw', cfg['subset_name'].split('~')[0], 'env.csv')
     tokenizer = make_tokenizer()
     tokenizer.train(True)
 
