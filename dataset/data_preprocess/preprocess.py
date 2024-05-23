@@ -1,0 +1,295 @@
+# -*- coding: utf-8 -*-
+
+# 基础库
+import os
+import pandas as pd
+import json
+import time
+
+# 自建库
+from df_washer import DataframeWasher
+from llm import LLM
+
+# 设置列表最大行数为500
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.width', 1000)
+pd.set_option('display.max_colwidth', 1000)
+
+
+# def sep_data_by_d_name(path, time_range, extension='csv'):
+#     time_range_data_path = os.path.join(path, time_range)
+# #     env_path = os.path.join(path, 'env.csv')
+#     env = pd.read_csv(env_path)
+#     env = env[env['level'] != 1]
+#     d_name_list = list(env['d_name'])
+#
+#     filenames = os.listdir(time_range_data_path)
+#     for filename in filenames:
+#         if filename.split('.')[-1] == extension:
+#             data = pd.read_csv(os.path.join(time_range_data_path, filename))
+#             for d_name in d_name_list:
+#                 data_i = data[data['d_name'] == d_name]
+#                 if not data_i.empty:
+#                     save_path_i = os.path.join(time_range_data_path, 'device', '{}.csv'.format(d_name))
+#                     data_i.to_csv(save_path_i, index=False)
+#     return
+
+
+class Preprocess:
+    def __init__(self, root_path, proj_name):
+
+        # 路径
+        self.root_path = root_path  # 根路径
+        self.proj_path = os.path.join(root_path, proj_name)  # 项目路径
+        self.raw_data_path = os.path.join(self.proj_path, 'raw')  # 原始数据路径
+        self.processed_data_path = os.path.join(self.proj_path, 'processed')  # 处理后数据路径
+        self.data_info_path = os.path.join(self.proj_path, 'data_info.json')  # 每个数据集所选列的json文件保存路径
+
+        self.dataset_names = []  # 数据集名称
+
+        self.directory_structure = {}  # 目录结构
+
+        # 初始化
+        self.build_directory_structure_dict()
+        self.create_directory()
+        self.data_info_dict = self.load_data_info()  # 数据集信息
+
+    # 初始化函数
+    def build_directory_structure_dict(self, sub_folders=('all', 'year')):
+
+        for dir_name in [self.root_path, self.proj_path, self.raw_data_path, self.processed_data_path]:
+            if not os.path.exists(dir_name):
+                os.mkdir(dir_name)
+
+        filenames = os.listdir(self.raw_data_path)
+
+        for filename in filenames:
+            dataset_dict = {}
+            for sub_folder in sub_folders:
+                dataset_dict[sub_folder] = []
+            filename = filename.split('.')[0]
+            self.dataset_names.append(filename)
+            self.directory_structure[filename] = dataset_dict
+        return
+
+    def create_directory(self, directory_structure=None, base_path=None):
+
+        if directory_structure is None:
+            directory_structure = self.directory_structure
+
+        if base_path is None:
+            base_path = self.processed_data_path
+
+        for key, value in directory_structure.items():
+            new_path = os.path.join(base_path, key)
+
+            # dict，递归本函数
+            if isinstance(value, dict):
+                if not os.path.exists(new_path):
+                    os.mkdir(new_path)
+                self.create_directory(value, new_path)
+            # list，最终目录
+            if isinstance(value, list):
+                if not os.path.exists(new_path):
+                    os.mkdir(new_path)
+        return
+
+    def load_data_info(self):
+        if not os.path.exists(self.data_info_path):
+            self.json_act(self.data_info_path, 'dump')
+        return self.json_act(self.data_info_path, 'load')
+
+
+    def load_dataset(self, dataset_names=None):
+        dataset = []
+        if dataset_names is None:
+            dataset_names = self.dataset_names
+
+        data_info = self.json_act(self.data_info_path, 'load')
+
+        for dataset_name in dataset_names:
+            column_indexes = data_info[dataset_name]['column_index']
+            df_column_names = [key for key in column_indexes.keys()]
+            df_column_index = [value for value in column_indexes.values()]
+
+            dataset_path = os.path.join(self.raw_data_path, dataset_name + '.txt')
+
+            print('\n\n=======Loading dataset {}======='.format(dataset_name))
+
+            df = pd.read_csv(dataset_path, sep='\t\t\t\t|\t\t\t|\t\t|\t|     |    |   |  | ', header=None,
+                             engine='python')
+
+            # 重命名列
+            df = df[df_column_index].copy()
+            df.rename(columns=dict(zip(df_column_index, df_column_names)), inplace=True)
+
+            # date和time列合并，对毫秒位四舍五入
+            df['time'] = df['time'].apply(lambda x: x if '.' in x else x + '.000000')
+            df['ts'] = pd.to_datetime(df['date'] + ' ' + df['time'], format='%Y-%m-%d %H:%M:%S.%f')
+            df = df.drop(['date', 'time'], axis=1)
+            df['ts'] = self.round_timestamp(df['ts'])
+
+            # 数据清洗
+            data_washer = DataframeWasher(self.data_wash_dict)
+            df = data_washer.wash(df)
+
+            d_name = df['d_name'].drop_duplicates().sort_values().tolist()  # 传感器名称 list
+
+            self.process_env(dataset_name, d_name)
+
+    def process_env(self, dataset_name, d_name):
+        concat_content = []
+
+        room_trans_dict = {'level': 1, 'd_type': 'room', 'd_name': '/'}
+        room_names = self.json_act(self.data_info_path, 'load')[dataset_name]['rooms']
+
+        sensor_trans_dict = {
+            'D0': {'level': 2, 'd_type': 'sensor', 'd_func': 'door'},
+            'LS': {'level': 2, 'd_type': 'sensor', 'd_func': 'light'},
+            'M0': {'level': 2, 'd_type': 'sensor', 'd_func': 'motion'},
+            'MA': {'level': 2, 'd_type': 'sensor', 'd_func': 'ambient'},
+            'T0': {'level': 2, 'd_type': 'sensor', 'd_func': 'temperature'},
+            'T1': {'level': 2, 'd_type': 'sensor', 'd_func': 'temperature'},
+            'L0': {'level': 2, 'd_type': 'sensor', 'd_func': 'lamp'},
+            'Bu': {'level': 3, 'd_type': 'controller', 'd_func': 'button'}
+        }
+
+        df = pd.DataFrame(columns=['level', 'd_name', 'd_type', 'd_func'])
+
+        for name in d_name:
+            matched_key = None
+            for key in sensor_trans_dict.keys():
+                if key in name:
+                    matched_key = key
+                    break
+            if matched_key:
+                new_row = {**sensor_trans_dict[matched_key], 'd_name': name}
+                concat_content.append(new_row)
+            else:
+                concat_content.append({'d_name': name, 'level': 'unknown', 'd_type': 'unknown', 'd_func': 'unknown'})
+
+        for room_name in room_names:
+            concat_content.append({**room_trans_dict, 'd_func': room_name})
+        concat_df = pd.DataFrame(concat_content)
+        df = pd.concat([df, concat_df], ignore_index=True).sort_values(by=['level', 'd_name'])
+        df.to_csv(os.path.join(self.processed_data_path, dataset_name, 'env.csv'), index=False)
+        return
+
+    @property
+    def data_wash_dict(self):
+        wash_dict = {
+            0: {
+                'action_type': 'drop',
+                'sub_action_type': 'contain',
+                'column_name': 'd_value',
+                'condition': {
+                    'c_column_name': None,
+                    'c_type': None,
+                    'c_value1': None,
+                    'c_value2': None
+                },
+                'input_value': ['TAP_COUNT', 'HOLD_DEPRESS', 'HOLD_RELEASE', 'RELEASE']
+            },
+            1: {
+                'action_type': 'replace',
+                'sub_action_type': 'equal',
+                'column_name': 'd_value',
+                'condition': {
+                    'c_column_name': None,
+                    'c_type': None,
+                    'c_value1': None,
+                    'c_value2': None
+                },
+                'input_value': {"ON": 1.0, "OFF": 0.0, "OPEN": 1.0, "CLOSE": 0.0}
+            },
+            2: {
+                'action_type': 'drop',
+                'sub_action_type': 'contain',
+                'column_name': 'd_name',
+                'condition': {
+                    'c_column_name': None,
+                    'c_type': None,
+                    'c_value1': None,
+                    'c_value2': None
+                },
+                'input_value': ['BATP', 'ZB', 'HOME']
+            },
+            3: {
+                'action_type': 'drop',
+                'sub_action_type': 'equal',
+                'column_name': 'd_name',
+                'condition': {
+                    'c_column_name': None,
+                    'c_type': None,
+                    'c_value1': None,
+                    'c_value2': None
+                },
+                'input_value': ['c'],
+                'target_value': []
+            },
+            4: {
+                'action_type': 'replace',
+                'sub_action_type': 'c_equal',
+                'column_name': 'd_value',
+                'condition': {
+                    'c_column_name': 'd_name',
+                    'c_type': 'contain',
+                    'c_value1': ['ButtonDown'],
+                    'c_value2': None
+                },
+                'input_value': 0.0
+            },
+            5: {
+                'action_type': 'replace',
+                'sub_action_type': 'c_equal',
+                'column_name': 'd_value',
+                'condition': {
+                    'c_column_name': 'd_name',
+                    'c_type': 'contain',
+                    'c_value1': ['ButtonUp'],
+                    'c_value2': None
+                },
+                'input_value': 1.0
+            },
+            6: {
+                'action_type': 'replace',
+                'sub_action_type': 'contain',
+                'column_name': 'd_name',
+                'condition': {
+                    'c_column_name': None,
+                    'c_type': None,
+                    'c_value1': None,
+                    'c_value2': None
+                },
+                'input_value': {'ButtonUp': 'Button', 'ButtonDown': 'Button'}
+            },
+        }
+        return wash_dict
+
+    # static函数
+    def json_act(self, path, action, content=None):
+        if content is None:
+            content = {}
+        if action == 'load':
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data
+        if action == 'dump':
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(content, f, ensure_ascii=False, indent=4)
+            return
+
+    def round_timestamp(self, s):
+        mic_second = s.dt.microsecond
+        max_digits = mic_second.astype(str).str.len().max()
+        rounded_seconds = (mic_second / (10 ** max_digits)).round()
+        s = s.dt.floor('s')
+        s += pd.to_timedelta(rounded_seconds, unit='s')
+        return s
+
+
+if __name__ == '__main__':
+    myllm = LLM()
+    pre = Preprocess('data', 'SmartHome')
+    pre.build_data_info(llm=myllm, llm_switch='ON')
+    pre.load_dataset()
