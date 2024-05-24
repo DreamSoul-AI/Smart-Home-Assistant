@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 # 基础库
 import os
 import pandas as pd
@@ -8,31 +7,6 @@ import time
 
 # 自建库
 from df_washer import DataframeWasher
-from llm import LLM
-
-# 设置列表最大行数为500
-pd.set_option('display.max_rows', 500)
-pd.set_option('display.width', 1000)
-pd.set_option('display.max_colwidth', 1000)
-
-
-# def sep_data_by_d_name(path, time_range, extension='csv'):
-#     time_range_data_path = os.path.join(path, time_range)
-# #     env_path = os.path.join(path, 'env.csv')
-#     env = pd.read_csv(env_path)
-#     env = env[env['level'] != 1]
-#     d_name_list = list(env['d_name'])
-#
-#     filenames = os.listdir(time_range_data_path)
-#     for filename in filenames:
-#         if filename.split('.')[-1] == extension:
-#             data = pd.read_csv(os.path.join(time_range_data_path, filename))
-#             for d_name in d_name_list:
-#                 data_i = data[data['d_name'] == d_name]
-#                 if not data_i.empty:
-#                     save_path_i = os.path.join(time_range_data_path, 'device', '{}.csv'.format(d_name))
-#                     data_i.to_csv(save_path_i, index=False)
-#     return
 
 
 class Preprocess:
@@ -66,7 +40,11 @@ class Preprocess:
         for filename in filenames:
             dataset_dict = {}
             for sub_folder in sub_folders:
-                dataset_dict[sub_folder] = []
+                if sub_folder == 'year':
+                    dataset_dict[sub_folder] = {}
+                    dataset_dict[sub_folder]['device'] = []
+                else:
+                    dataset_dict[sub_folder] = []
             filename = filename.split('.')[0]
             self.dataset_names.append(filename)
             self.directory_structure[filename] = dataset_dict
@@ -99,8 +77,7 @@ class Preprocess:
             self.json_act(self.data_info_path, 'dump')
         return self.json_act(self.data_info_path, 'load')
 
-
-    def load_dataset(self, dataset_names=None):
+    def process_dataset(self, dataset_names=None):
         dataset = []
         if dataset_names is None:
             dataset_names = self.dataset_names
@@ -113,8 +90,12 @@ class Preprocess:
             df_column_index = [value for value in column_indexes.values()]
 
             dataset_path = os.path.join(self.raw_data_path, dataset_name + '.txt')
+            processed_dataset_path = os.path.join(self.processed_data_path, dataset_name)
+            all_data_path = os.path.join(processed_dataset_path, 'all')
+            year_data_path = os.path.join(processed_dataset_path, 'year')
+            device_data_path = os.path.join(year_data_path, 'device')
 
-            print('\n\n=======Loading dataset {}======='.format(dataset_name))
+            print('\n\n=======Processing dataset {}=======\n'.format(dataset_name))
 
             df = pd.read_csv(dataset_path, sep='\t\t\t\t|\t\t\t|\t\t|\t|     |    |   |  | ', header=None,
                              engine='python')
@@ -133,9 +114,40 @@ class Preprocess:
             data_washer = DataframeWasher(self.data_wash_dict)
             df = data_washer.wash(df)
 
+            ## 查看异常的str数据
+            # str_values = df[df['d_value'].apply(lambda x: isinstance(x, str))]['d_value']
+            # special_value = list(str_values.unique())
+            # print(special_value)
+
             d_name = df['d_name'].drop_duplicates().sort_values().tolist()  # 传感器名称 list
 
+            # 保存env.csv
             self.process_env(dataset_name, d_name)
+
+            # 保存all文件夹下的data.csv
+            df.to_csv(os.path.join(all_data_path, 'data.csv'), index=False)
+
+            # 按年份分割数据，并保存在year文件夹下
+            df['year'] = df['ts'].dt.year
+            unique_years = df['year'].unique()
+            for year in unique_years:
+                year_df = df[df['year'] == year].copy()
+                year_df.drop(columns=['year'], inplace=True)
+                year_df.to_csv(os.path.join(year_data_path, 'data_{}.csv'.format(year)), index=False)
+            df.drop(columns=['year'], inplace=True)
+
+            # 按d_name分割年份数据，并保存在device文件夹下
+            filenames = os.listdir(year_data_path)
+            for filename in filenames:
+                if filename.split('.')[-1] == 'csv':
+                    data = pd.read_csv(os.path.join(year_data_path, filename))
+                    for name in d_name:
+                        data_i = data[data['d_name'] == name]
+                        if not data_i.empty:
+                            save_path_i = os.path.join(device_data_path,
+                                                       '{}_{}.csv'.format(filename.split('.')[0], name))
+                            data_i.to_csv(save_path_i, index=False)
+            print('=======Processing Finished=======\n\n'.format(dataset_name))
 
     def process_env(self, dataset_name, d_name):
         concat_content = []
@@ -263,6 +275,43 @@ class Preprocess:
                 },
                 'input_value': {'ButtonUp': 'Button', 'ButtonDown': 'Button'}
             },
+            7: {
+                'action_type': 'drop',
+                'sub_action_type': 'cant_trans_to_num',
+                'column_name': 'd_value',
+                'condition': {
+                    'c_column_name': None,
+                    'c_type': None,
+                    'c_value1': None,
+                    'c_value2': None
+                },
+                'input_value': None
+            },
+            8: {
+                'action_type': 'trans',
+                'sub_action_type': 'value_type',
+                'column_name': 'd_name',
+                'condition': {
+                    'c_column_name': None,
+                    'c_type': None,
+                    'c_value1': None,
+                    'c_value2': None
+                },
+                'input_value': 'str'
+            },
+            9: {
+                'action_type': 'trans',
+                'sub_action_type': 'value_type',
+                'column_name': 'd_value',
+                'condition': {
+                    'c_column_name': None,
+                    'c_type': None,
+                    'c_value1': None,
+                    'c_value2': None
+                },
+                'input_value': float
+            }
+
         }
         return wash_dict
 
@@ -289,7 +338,6 @@ class Preprocess:
 
 
 if __name__ == '__main__':
-    myllm = LLM()
-    pre = Preprocess('data', 'SmartHome')
-    pre.build_data_info(llm=myllm, llm_switch='ON')
-    pre.load_dataset()
+    data_preprocess = Preprocess('data', 'SmartHome')
+
+    data_preprocess.process_dataset() # raw中放入dataset的txt文件后即可运行该行

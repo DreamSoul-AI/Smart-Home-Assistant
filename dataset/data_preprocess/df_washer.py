@@ -18,7 +18,6 @@ class DataframeWasher:
             method_name = 'action_{}_{}'.format(action_type, sub_action_type)
             if 'c_' in sub_action_type:
                 method_to_call = getattr(self, method_name, None)
-
                 if callable(method_to_call):
                     df = method_to_call(df, column_name, input_value, condition)
                     # print('============={}============='.format(step))
@@ -62,8 +61,14 @@ class DataframeWasher:
             df.loc[df[c_column_name].isin(c_value1), column_name] = input_value
             return df
 
-    def action_error_scan_valuetype(self, df, column_name, input_value):
-        pass
+    def action_trans_value_type(self, df, column_name, input_value):
+        df[column_name] = df[column_name].astype(input_value)
+        return df
+
+    def action_drop_cant_trans_to_num(self, df, column_name, input_value):
+        df[column_name] = pd.to_numeric(df[column_name], errors='coerce')
+        df.dropna(subset=[column_name], inplace=True)
+        return df
 
 
 if __name__ == '__main__':
@@ -153,18 +158,42 @@ if __name__ == '__main__':
             },
             'input_value': {'ButtonUp': 'Button', 'ButtonDown': 'Button'}
         },
-        # 7: {
-        #     'action_type': 'error_scan',
-        #     'sub_action_type': 'valuetype',
-        #     'column_name': 'd_name',
-        #     'condition': {
-        #         'c_column_name': None,
-        #         'c_type': None,
-        #         'c_value1': None,
-        #         'c_value2': None
-        #     },
-        #     'input_value': 'str'
-        # }
+        7: {
+            'action_type': 'drop',
+            'sub_action_type': 'cant_trans_to_num',
+            'column_name': 'd_value',
+            'condition': {
+                'c_column_name': None,
+                'c_type': None,
+                'c_value1': None,
+                'c_value2': None
+            },
+            'input_value': None
+        },
+        8: {
+            'action_type': 'trans',
+            'sub_action_type': 'value_type',
+            'column_name': 'd_name',
+            'condition': {
+                'c_column_name': None,
+                'c_type': None,
+                'c_value1': None,
+                'c_value2': None
+            },
+            'input_value': 'str'
+        },
+        9: {
+            'action_type': 'trans',
+            'sub_action_type': 'value_type',
+            'column_name': 'd_value',
+            'condition': {
+                'c_column_name': None,
+                'c_type': None,
+                'c_value1': None,
+                'c_value2': None
+            },
+            'input_value': float
+        }
     }
 
     test_data0 = {
@@ -202,7 +231,20 @@ if __name__ == '__main__':
         'd_name': ['ButtonupA', 'ButtonUp007', 'ButtonUp001', 'ButtonUp002', 'Buttonup']
     }
 
-    test_dataset = (test_data0, test_data1, test_data2, test_data3, test_data4, test_data5, test_data6)
+    test_data7 = {
+        'd_value': [1, 2, 3.0],
+        'd_name': ['A', 'B', 'C']
+    }
+
+    test_data8 = {
+        'd_value': ['001', '0.25', '0.006', 'OFF5cc', 'OFF5c', 'ON5c'],
+        'd_name': ['A', 'B', 'C', 'D', 'E', 'F']
+    }
+
+    # test_dataset = (test_data0, test_data1, test_data2, test_data3, test_data4, test_data5, test_data6)
+    test_dataset = [test_data8]
+
+
 
     for i, test_data in enumerate(test_dataset):
         print('\n\n====={}====='.format(i))
