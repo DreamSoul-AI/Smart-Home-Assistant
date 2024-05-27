@@ -38,7 +38,7 @@ class DataframeWasher:
         return df[~df[column_name].astype(str).str.contains(pattern)]
 
     def action_replace_equal(self, df, column_name, input_value: dict):
-        df.loc[:, column_name] = df.loc[:, column_name].replace(input_value)
+        df.loc[:, column_name] = df.loc[:, column_name].astype(str).replace(input_value)
         return df
 
     def action_replace_contain(self, df, column_name, input_value: dict):
@@ -54,7 +54,10 @@ class DataframeWasher:
 
         if c_type == 'contain':
             pattern = '|'.join(map(re.escape, c_value1))
-            df.loc[df[c_column_name].astype(str).str.contains(pattern), column_name] = input_value
+            if isinstance(input_value, list):
+                df.loc[df[c_column_name].astype(str).str.contains(pattern), column_name] = input_value
+            if isinstance(input_value, dict):
+                df.loc[df[c_column_name].astype(str).str.contains(pattern), column_name] = df.loc[df[c_column_name].astype(str).str.contains(pattern), column_name].astype(str).replace(input_value)
             return df
 
         if c_type == 'equal':
@@ -159,6 +162,18 @@ if __name__ == '__main__':
             'input_value': {'ButtonUp': 'Button', 'ButtonDown': 'Button'}
         },
         7: {
+            'action_type': 'replace',
+            'sub_action_type': 'c_equal',
+            'column_name': 'd_value',
+            'condition': {
+                'c_column_name': 'd_name',
+                'c_type': 'contain',
+                'c_value1': ['L0'],
+                'c_value2': None
+            },
+            'input_value': {'100': '1'}
+        },
+        8: {
             'action_type': 'drop',
             'sub_action_type': 'cant_trans_to_num',
             'column_name': 'd_value',
@@ -170,7 +185,7 @@ if __name__ == '__main__':
             },
             'input_value': None
         },
-        8: {
+        9: {
             'action_type': 'trans',
             'sub_action_type': 'value_type',
             'column_name': 'd_name',
@@ -182,7 +197,7 @@ if __name__ == '__main__':
             },
             'input_value': 'str'
         },
-        9: {
+        10: {
             'action_type': 'trans',
             'sub_action_type': 'value_type',
             'column_name': 'd_value',
@@ -241,8 +256,13 @@ if __name__ == '__main__':
         'd_name': ['A', 'B', 'C', 'D', 'E', 'F']
     }
 
+    test_data9 = {
+        'd_value': ['100', '1000', '100', '100', '100', '00100'],
+        'd_name': ['L001', 'L002', 'l001', 'L112', 'LSL005', 'L004']
+    }
+
     # test_dataset = (test_data0, test_data1, test_data2, test_data3, test_data4, test_data5, test_data6)
-    test_dataset = [test_data8]
+    test_dataset = [test_data9]
 
 
 

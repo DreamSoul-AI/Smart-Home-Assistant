@@ -104,11 +104,12 @@ class Preprocess:
             df = df[df_column_index].copy()
             df.rename(columns=dict(zip(df_column_index, df_column_names)), inplace=True)
 
-            # date和time列合并，对毫秒位四舍五入
             df['time'] = df['time'].apply(lambda x: x if '.' in x else x + '.000000')
             df['ts'] = pd.to_datetime(df['date'] + ' ' + df['time'], format='%Y-%m-%d %H:%M:%S.%f')
             df = df.drop(['date', 'time'], axis=1)
-            df['ts'] = self.round_timestamp(df['ts'])
+
+            ## date和time列合并，对毫秒位四舍五入
+            # df['ts'] = self.round_timestamp(df['ts'])
 
             # 数据清洗
             data_washer = DataframeWasher(self.data_wash_dict)
@@ -276,6 +277,18 @@ class Preprocess:
                 'input_value': {'ButtonUp': 'Button', 'ButtonDown': 'Button'}
             },
             7: {
+                'action_type': 'replace',
+                'sub_action_type': 'c_equal',
+                'column_name': 'd_value',
+                'condition': {
+                    'c_column_name': 'd_name',
+                    'c_type': 'contain',
+                    'c_value1': ['L0'],
+                    'c_value2': None
+                },
+                'input_value': {'100': '1'}
+            },
+            8: {
                 'action_type': 'drop',
                 'sub_action_type': 'cant_trans_to_num',
                 'column_name': 'd_value',
@@ -287,7 +300,7 @@ class Preprocess:
                 },
                 'input_value': None
             },
-            8: {
+            9: {
                 'action_type': 'trans',
                 'sub_action_type': 'value_type',
                 'column_name': 'd_name',
@@ -299,7 +312,7 @@ class Preprocess:
                 },
                 'input_value': 'str'
             },
-            9: {
+            10: {
                 'action_type': 'trans',
                 'sub_action_type': 'value_type',
                 'column_name': 'd_value',
@@ -311,7 +324,6 @@ class Preprocess:
                 },
                 'input_value': float
             }
-
         }
         return wash_dict
 
@@ -340,4 +352,4 @@ class Preprocess:
 if __name__ == '__main__':
     data_preprocess = Preprocess('data', 'SmartHome')
 
-    data_preprocess.process_dataset() # raw中放入dataset的txt文件后即可运行该行
+    data_preprocess.process_dataset()  # raw中放入dataset的txt文件后即可运行该行
