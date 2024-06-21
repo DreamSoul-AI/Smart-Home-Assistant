@@ -41,8 +41,9 @@ def runExperiment():
     cfg['best_path'] = os.path.join(cfg['tag_path'], 'best')
     cfg['logger_path'] = os.path.join('output', 'logger', 'train', 'runs', cfg['tag'])
     cfg['tokenizer_path'] = os.path.join(cfg['path'], 'tokenizer')
-    tokenizer = resume(os.path.join(cfg['tokenizer_path']))[cfg['data_name']]
+    # tokenizer = resume(os.path.join(cfg['tokenizer_path']))[cfg['data_name']]
     dataset = make_dataset(cfg['data_name'], cfg['subset_name'])
+    exit()
     dataset = process_dataset(dataset, tokenizer)
     model = make_model(tokenizer, cfg['model'])
     result = resume(cfg['checkpoint_path'], resume_mode=cfg['resume_mode'])

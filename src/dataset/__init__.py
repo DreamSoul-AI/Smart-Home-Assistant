@@ -4,3 +4,4 @@ from .mnist import MNIST, FashionMNIST
 from .cifar import CIFAR10, CIFAR100
 from .svhn import SVHN
 from .smarthome import SmartHome
+from .preprocess import Preprocess

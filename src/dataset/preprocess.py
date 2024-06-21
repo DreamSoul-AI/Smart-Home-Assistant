@@ -3,10 +3,8 @@
 import os
 import pandas as pd
 import json
+import re
 import time
-
-# 自建库
-from df_washer import DataframeWasher
 
 
 class Preprocess:
@@ -16,7 +14,7 @@ class Preprocess:
         self.root_path = root_path  # 根路径
         self.proj_path = os.path.join(root_path, proj_name)  # 项目路径
         self.raw_data_path = os.path.join(self.proj_path, 'raw')  # 原始数据路径
-        self.processed_data_path = os.path.join(self.proj_path, 'processed')  # 处理后数据路径
+        self.processed_data_path = os.path.join(self.proj_path, 'preprocessed')  # 处理后数据路径
         self.data_info_path = os.path.join(self.proj_path, 'data_info.json')  # 每个数据集所选列的json文件保存路径
 
         self.dataset_names = []  # 数据集名称
@@ -27,6 +25,9 @@ class Preprocess:
         self.build_directory_structure_dict()
         self.create_directory()
         self.data_info_dict = self.load_data_info()  # 数据集信息
+
+        # 处理数据
+        self.process_dataset()
 
     # 初始化函数
     def build_directory_structure_dict(self, sub_folders=('all', 'year')):
@@ -85,17 +86,20 @@ class Preprocess:
         data_info = self.json_act(self.data_info_path, 'load')
 
         for dataset_name in dataset_names:
+            processed_dataset_path = os.path.join(self.processed_data_path, dataset_name)
+            if os.path.exists(os.path.join(processed_dataset_path, 'env.csv')):
+                continue
+            
             column_indexes = data_info[dataset_name]['column_index']
             df_column_names = [key for key in column_indexes.keys()]
             df_column_index = [value for value in column_indexes.values()]
-
             dataset_path = os.path.join(self.raw_data_path, dataset_name + '.txt')
-            processed_dataset_path = os.path.join(self.processed_data_path, dataset_name)
+            
             all_data_path = os.path.join(processed_dataset_path, 'all')
             year_data_path = os.path.join(processed_dataset_path, 'year')
             device_data_path = os.path.join(year_data_path, 'device')
 
-            print('\n\n=======Processing dataset {}=======\n'.format(dataset_name))
+            print('\n\n=======Preprocessing dataset {}=======\n'.format(dataset_name))
 
             df = pd.read_csv(dataset_path, sep='\t\t\t\t|\t\t\t|\t\t|\t|     |    |   |  | ', header=None,
                              engine='python')
@@ -148,7 +152,7 @@ class Preprocess:
                             save_path_i = os.path.join(device_data_path,
                                                        '{}_{}.csv'.format(filename.split('.')[0], name))
                             data_i.to_csv(save_path_i, index=False)
-            print('=======Processing Finished=======\n\n'.format(dataset_name))
+            print('=======Preprocessing Finished=======\n\n'.format(dataset_name))
 
     def process_env(self, dataset_name, d_name):
         concat_content = []
@@ -327,8 +331,8 @@ class Preprocess:
         }
         return wash_dict
 
-    # static函数
-    def json_act(self, path, action, content=None):
+    @staticmethod
+    def json_act(path, action, content=None):
         if content is None:
             content = {}
         if action == 'load':
@@ -340,7 +344,8 @@ class Preprocess:
                 json.dump(content, f, ensure_ascii=False, indent=4)
             return
 
-    def round_timestamp(self, s):
+    @staticmethod
+    def round_timestamp(s):
         mic_second = s.dt.microsecond
         max_digits = mic_second.astype(str).str.len().max()
         rounded_seconds = (mic_second / (10 ** max_digits)).round()
@@ -349,7 +354,78 @@ class Preprocess:
         return s
 
 
+class DataframeWasher:
+    def __init__(self, wash_dict):
+        self.wash_dict = wash_dict
+        self.wash_step_len = len(wash_dict)
+
+    def wash(self, df):
+        for step in range(self.wash_step_len):
+            task_info = self.wash_dict[step]
+            action_type = task_info['action_type']
+            sub_action_type = task_info['sub_action_type']
+            column_name = task_info['column_name']
+            condition = task_info['condition']
+            input_value = task_info['input_value']
+            method_name = 'action_{}_{}'.format(action_type, sub_action_type)
+            if 'c_' in sub_action_type:
+                method_to_call = getattr(self, method_name, None)
+                if callable(method_to_call):
+                    df = method_to_call(df, column_name, input_value, condition)
+                    # print('============={}============='.format(step))
+                    # print(df)
+            else:
+                method_to_call = getattr(self, method_name, None)
+                if callable(method_to_call):
+                    df = method_to_call(df, column_name, input_value)
+                    # print('============={}============='.format(step))
+                    # print(df)
+        return df
+
+    def action_drop_equal(self, df, column_name, input_value: list):
+        return df[~df[column_name].isin(input_value)]
+
+    def action_drop_contain(self, df, column_name, input_value: list):
+        pattern = '|'.join(map(re.escape, input_value))
+        return df[~df[column_name].astype(str).str.contains(pattern)]
+
+    def action_replace_equal(self, df, column_name, input_value: dict):
+        df.loc[:, column_name] = df.loc[:, column_name].astype(str).replace(input_value)
+        return df
+
+    def action_replace_contain(self, df, column_name, input_value: dict):
+        for k, v in input_value.items():
+            df.loc[:, column_name] = df.loc[:, column_name].astype(str).str.replace(k, v)
+        return df
+
+    def action_replace_c_equal(self, df, column_name, input_value, condition: dict):
+        c_column_name = condition['c_column_name']
+        c_type = condition['c_type']
+        c_value1 = condition['c_value1']
+        # c_value2 = condition['c_value2']
+
+        if c_type == 'contain':
+            pattern = '|'.join(map(re.escape, c_value1))
+            if isinstance(input_value, list):
+                df.loc[df[c_column_name].astype(str).str.contains(pattern), column_name] = input_value
+            if isinstance(input_value, dict):
+                df.loc[df[c_column_name].astype(str).str.contains(pattern), column_name] = df.loc[
+                    df[c_column_name].astype(str).str.contains(pattern), column_name].astype(str).replace(input_value)
+            return df
+
+        if c_type == 'equal':
+            df.loc[df[c_column_name].isin(c_value1), column_name] = input_value
+            return df
+
+    def action_trans_value_type(self, df, column_name, input_value):
+        df[column_name] = df[column_name].astype(input_value)
+        return df
+
+    def action_drop_cant_trans_to_num(self, df, column_name, input_value):
+        df[column_name] = pd.to_numeric(df[column_name], errors='coerce')
+        df.dropna(subset=[column_name], inplace=True)
+        return df
+
+
 if __name__ == '__main__':
     data_preprocess = Preprocess('data', 'SmartHome')
-
-    data_preprocess.process_dataset()  # raw中放入dataset的txt文件后即可运行该行

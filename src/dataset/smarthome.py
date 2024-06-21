@@ -7,6 +7,7 @@ from multiprocessing import Pool
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from module import check_exists, makedir_exist_ok, save, load
+from scipy.interpolate import interp1d
 
 
 class SmartHome(Dataset):
@@ -17,6 +18,7 @@ class SmartHome(Dataset):
         self.split = split
         self.transform = None
         self.subset = self.parse_subset(subset)
+
         self.seq_len = seq_len
         self.hop_len = hop_len
         self.min_len = min_len
@@ -26,23 +28,46 @@ class SmartHome(Dataset):
 
     def parse_subset(self, subset):
         parsed_subset = []
+        processed_folder = self.processed_folder
         subset_list = subset.split('-')
+        data_info_set = ['all', 'all', 'all']
         for i in range(len(subset_list)):
-            subset_i_list = subset_list[i].split('~')
-            room_set = subset_i_list[0]
-            if len(subset_i_list) == 1:
+            data_info_set[i] = subset_list[i]
+        room_info, year_info, device_info = data_info_set
+        if room_info == 'all':
+            room_set = os.listdir(processed_folder)
+        else:
+            room_set = room_info.split('~')
+
+        for room in room_set:
+            if year_info == 'all':
                 year_set = []
-                filenames = os.listdir(os.path.join(self.raw_folder, room_set))
+                filenames = os.listdir(os.path.join(processed_folder, room, 'year'))
+                print(filenames)
                 for filename in filenames:
                     if filename.startswith('data_') and filename.endswith('.csv'):
                         year_set_i = os.path.splitext(filename)[0].split('_')[1]
                         year_set.append(year_set_i)
             else:
-                year_set = subset_i_list[1:]
-            for j in range(len(year_set)):
-                parsed_subset_i_j = '{}~{}'.format(room_set, year_set[j])
-                parsed_subset.append(parsed_subset_i_j)
-        return parsed_subset
+                year_set = year_info.split('~')
+
+            if device_info == 'all':
+                device_set = []
+                filenames = os.listdir(os.path.join(processed_folder, room, 'year', 'device'))
+                for filename in filenames:
+                    if filename.startswith('data_') and filename.endswith('.csv'):
+                        device_set_i = os.path.splitext(filename)[0].split('_')[2]
+                        device_set.append(device_set_i)
+            else:
+                device_set = device_info.split('~')
+
+            for year in year_set:
+                for device in device_set:
+                    parsed_subset.append('{}~{}~{}'.format(room, year, device))
+
+        seen = set()
+        result = [x for i, x in enumerate(parsed_subset) if x not in seen and not seen.add(x)]
+        return result
 
     def configure(self, subset=None, seq_len=None, hop_len=None, min_len=None,
                   transform=None):  # 用于更新参数，子集（subset），序列长度（seq_len），跳跃长度（hop_len），最小长度（min_len）
@@ -71,29 +96,36 @@ class SmartHome(Dataset):
         length = self.length[-1]
         return length
 
-    @property  # 将方法转化为属性，访问该属性时不再需要加括号（ 如processed_folder() ）
+    @property
     def processed_folder(self):
         return os.path.join(self.root, 'processed')
 
-    @property  # 同上
+    @property
+    def preprocessed_folder(self):
+        return os.path.join(self.root, 'preprocessed')
+
+    @property
     def raw_folder(self):
         return os.path.join(self.root, 'raw')
 
+
     def process(self):
         self.configure()
-        if not check_exists(self.raw_folder):  # 当root\raw文件夹不存在时，抛出报错
-            self.download()
+        # if not check_exists(self.preprocessed_folder):  # 当root\processed文件夹不存在时，抛出报错
+        #     self.download()
         for subset in self.subset:
-            room_set, year_set = subset.split('~')
-            data_path = os.path.join(self.processed_folder, room_set, year_set, self.configuration)  # 数据子集路径
+            room_set, year_set, device_set = subset.split('~')
+            data_path = os.path.join(self.processed_folder, room_set, year_set, device_set, self.configuration)  # 数据子集路径
             print(f'data_path: {data_path}')
+
             if not check_exists(data_path) or self.reprocess:  # 如果子集路径不存在，建立子集路径
                 makedir_exist_ok(data_path)
-                train_set, test_set, meta = self.make_data(room_set, year_set)
+                train_set, test_set = self.make_data(room_set, year_set, device_set)
                 save(train_set, os.path.join(data_path, 'train'))
                 save(test_set, os.path.join(data_path, 'test'))
-                save(train_set, os.path.join(data_path, 'meta'))
-        self.data, self.meta = self.load_data()
+                # save(train_set, os.path.join(data_path, 'meta'))
+        # self.data, self.meta = self.load_data()
+        self.data = self.load_data()
         return
 
     def download(self):  # 抛出报错NotImplementedError
@@ -104,44 +136,41 @@ class SmartHome(Dataset):
         self.length = []
         length = 0
         for subset in self.subset:
-            room_set, year_set = subset.split('~')
-            data[subset] = load(os.path.join(self.processed_folder, room_set, year_set,
+            room_set, year_set, device_set = subset.split('~')
+            data[subset] = load(os.path.join(self.processed_folder, room_set, year_set, device_set,
                                              self.configuration, self.split))
-            meta[subset] = load(os.path.join(self.processed_folder, room_set, year_set,
-                                             self.configuration, 'meta'))
+            # meta[subset] = load(os.path.join(self.processed_folder, room_set, year_set, device_set,
+            #                                  self.configuration, 'meta'))
             length += len(data[subset])
             self.length.append(length)
-        return data, meta
+        # return data, meta
+        return data
 
     def __repr__(self):
         fmt_str = 'Dataset {}\nSize: {}\nRoot: {}\nSplit: {}'.format(self.__class__.__name__, self.__len__(),
                                                                      self.root, self.split)
         return fmt_str
 
-    def make_data(self, room_set, year_set):
-        print('----------------make_data ({}, {})-------------------'.format(room_set, year_set))
-        data = pd.read_csv(os.path.join(self.raw_folder, room_set, 'data_{}.csv'.format(year_set)), delimiter=',')
-        subset_ratio = 0.01  # make it small for test
+    def make_data(self, room_set, year_set, device_set):
+        print('----------------make_data: {}_{}_{}-------------------'.format(room_set, year_set, device_set))
+        file_path = os.path.join(self.preprocessed_folder, room_set, 'year', 'device', 'data_{}_{}.csv'.format(year_set, device_set))
+
+        data = pd.read_csv(file_path)
+        # data = pd.read_csv(os.path.join(self.raw_folder, room_set, 'data_{}.csv'.format(year_set)), delimiter=',')
+
+        subset_ratio = 1.0  # make it small for test
         split_index = int(subset_ratio * len(data))
         data = data[:split_index]
-        env_path = os.path.join(self.raw_folder, room_set, 'env.csv')
-        if os.path.exists(env_path):
-            env = pd.read_csv(env_path, delimiter=',')
-        else:
-            env = None
-        data = data[['ts', 'd_name', 'd_type', 'd_func', 'd_value']]
 
+        data = data[['ts', 'd_name', 'd_value']]
         data['ts'] = pd.to_datetime(data['ts'])
 
-        data.loc[data['d_func'] == 'lamp', 'd_value'] = data.loc[data['d_func'] == 'lamp', 'd_value'] / 100.0
-        data.loc[data['d_func'] == 'light', 'd_value'] = data.loc[data['d_func'] == 'light', 'd_value'] / 100.0
-        data.loc[data['d_func'] == 'temperature', 'd_value'] = data.loc[
-                                                                   data['d_func'] == 'temperature', 'd_value'] / 50.0
+        # normalization
+        prefixes = ['LS', 'T0', 'T1']
+        data.loc[data['d_name'].str[:2].isin(prefixes), 'd_value'] = data.loc[data['d_name'].str[:2].isin(
+            prefixes), 'd_value'] / 100.0
 
         print(f'-----------len(data): {len(data)}')
-
-        unique_count = len(data['d_type'].unique())
-        print('Number of unique d_type in data: {}'.format(unique_count))
 
         data = self.batchify(data)
 
@@ -150,69 +179,76 @@ class SmartHome(Dataset):
         split_index = int(split_ratio * len(data['data']))
         train_indices = indices[:split_index]
         test_indices = indices[split_index:]
-        train_data = {'data': [data['data'][i] for i in train_indices],
-                      't_start': [data['t_start'][i] for i in train_indices]}
-        test_data = {'data': [data['data'][i] for i in test_indices],
-                     't_start': [data['t_start'][i] for i in test_indices]}
+        train_data = {'data': [data['data'][i] for i in train_indices]}
+        test_data = {'data': [data['data'][i] for i in test_indices]}
 
         print(f'-----------len(train_data): {len(train_data)}')
         print(f'-----------len(test_data): {len(test_data)}')
 
-        return train_data, test_data, env
+        return train_data, test_data
 
     def process_chunk(self, chunk_args):
-        chunk, seq_len, min_len, dataset = chunk_args  # 读取元组数据
-        data = {'data': [], 't_start': []}
+        chunk, dataset = chunk_args  # 读取元组数据
+        data = {'data': []}
         for t_start in tqdm(chunk, desc="Processing chunk", leave=False):  # 遍历chunk中的start_times
-            t_end = t_start + seq_len
-            data_i = dataset[
-                (dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]  # 以t_start为起点，t_end为终点，在dataset中获取data_i
-            if len(data_i) < min_len:  # data_i小于最小长度时结束处理
-                continue
-            data['t_start'].append(t_start)
+            t_end = t_start + self.seq_len
+            data_i = dataset[t_start:t_end]  # 以t_start为起点，t_end为终点，在dataset中获取data_i
             data['data'].append(data_i)  # 每个序列数据
         return data
 
     def batchify(self, dataset):
-        seq_len = pd.Timedelta(seconds=self.seq_len)  # 序列长度
-        hop_len = pd.Timedelta(seconds=self.hop_len)  # 跳跃长度
-        min_len = self.min_len  # 最小长度
-        start_times = pd.date_range(start=dataset.iloc[0]['ts'], end=dataset.iloc[-1]['ts'] - seq_len,
-                                    freq=hop_len)  # 以第一个时间为起点，以300秒为间隔，获取开始时间列表
+        interpolate_function = self.get_interpolate_function(dataset)
+        dataset = self.interpolate_data(dataset, interpolate_function)  #
 
-        # print(dataset['d_type'].unique())
-        # 控制器数据
+        print(len(dataset))
+        # s_r = 0.01
+        # s_data_len = int(s_r * len(dataset))
+        # dataset = dataset[:s_data_len]
+        start_index = np.arange(0, len(dataset) - self.seq_len, self.hop_len)
 
-        # Split start_times into chunks
-        n_chunks = 4  # Number of chunks, can be adjusted
-        chunks = np.array_split(start_times, n_chunks)  # 将start_timies平均切割为4份
-        args = [(chunk, seq_len, min_len, dataset) for chunk in
-                chunks]  # 将每份数据chunk、序列长度、最小长度、预测长度、全部控制器数据、全部数据组成元组，将各元组以列表形式保存到args中
-
+        n_chunks = 8  # Number of chunks, can be adjusted
+        chunks = np.array_split(start_index, n_chunks)  # 将start_timies平均切割为8份
+        args = [(chunk, dataset) for chunk in chunks]  # 将每份数据chunk、序列长度、最小长度、预测长度、全部控制器数据、全部数据组成元组，将各元组以列表形式保存到args中
         with Pool() as pool:
             results = list(tqdm(pool.imap(self.process_chunk, args),
                                 total=len(chunks)))  # 将args传递给self.process_chunk函数在一个池中的独立进程上并行处理，处理结果保存到列表results中
-
         # Combine results
-        data = {'data': [], 't_start': []}
+        data = {'data': []}
         for result in results:
             data['data'].extend(result['data'])
-            data['t_start'].extend(result['t_start'])
+
         return data
 
-    # def batchify(self, dataset):
-    #     seq_len = pd.Timedelta(seconds=self.seq_len)
-    #     hop_len = pd.Timedelta(seconds=self.hop_len)
-    #     min_len = self.min_len
-    #     start_times = pd.date_range(start=dataset.iloc[0]['ts'],
-    #                                 end=dataset.iloc[-1]['ts'] - seq_len, freq=hop_len)
-    #     data = {'data': [], 't_start': []}
-    #     for i in tqdm(range(len(start_times))):
-    #         t_start = start_times[i]
-    #         t_end = t_start + seq_len
-    #         data_i = dataset[(dataset['ts'] >= t_start) & (dataset['ts'] < t_end)]
-    #         if len(data_i) < min_len:
-    #             continue
-    #         data['t_start'].append(t_start)
-    #         data['data'].append(data_i)
-    #     return data
+    @staticmethod
+    def get_interpolate_function(dataset):
+        data = dataset.copy()
+        data['ts'] = data['ts'].astype(np.int64)
+        x = data['ts'].values
+        y = data['d_value'].values
+        f = interp1d(x, y, kind='previous', bounds_error=False, fill_value=np.nan)
+        return f
+
+    @staticmethod
+    def interpolate_data(df, f, freq=1):
+        addon = 1
+        df_ts_max = df['ts'].astype(np.int64).values.max()
+
+        df_i = df['ts'].dt.floor('s')
+        df_i = df_i.astype(np.int64)
+
+        start_ts = df_i.values.min()
+        end_ts = df_i.values.max()
+        s_to_ns = 1_000_000_000  # 每秒的纳秒数
+        step_ns = freq * s_to_ns
+
+        addon += s_to_ns if end_ts != df_ts_max else 0
+
+        ts_new = np.arange(start_ts, end_ts + addon, step_ns)
+        # print(ts_new)
+        y_new = f(ts_new)
+        ts = pd.to_datetime(ts_new, unit='ns')
+        df = pd.DataFrame({'ts': ts, 'd_value': y_new})
+        return df
+
+
+

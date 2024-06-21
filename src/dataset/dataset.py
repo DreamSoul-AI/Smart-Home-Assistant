@@ -57,6 +57,7 @@ def make_dataset(data_name, subset_name, verbose=True):
             transforms.ToTensor(),
             transforms.Normalize(*data_stats[data_name])])
     elif data_name in ['SmartHome']:
+        dataset.Preprocess('data', data_name)
         dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=subset_name)
         dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=subset_name)
     else:
