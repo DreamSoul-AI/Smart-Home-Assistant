@@ -173,6 +173,9 @@ class SmartHome(Dataset):
         print(f'-----------len(data): {len(data)}')
 
         data = self.batchify(data)
+        print(data['data'][:10])
+        exit()
+
 
         indices = np.random.permutation(len(data['data']))
         split_ratio = 0.9
@@ -188,27 +191,32 @@ class SmartHome(Dataset):
         return train_data, test_data
 
     def process_chunk(self, chunk_args):
-        chunk, dataset = chunk_args  # 读取元组数据
+        chunk, dataset, freq = chunk_args  # 读取元组数据
         data = {'data': []}
         for t_start in tqdm(chunk, desc="Processing chunk", leave=False):  # 遍历chunk中的start_times
-            t_end = t_start + self.seq_len
+            t_end = t_start + self.seq_len // freq
             data_i = dataset[t_start:t_end]  # 以t_start为起点，t_end为终点，在dataset中获取data_i
             data['data'].append(data_i)  # 每个序列数据
         return data
 
     def batchify(self, dataset):
         interpolate_function = self.get_interpolate_function(dataset)
-        dataset = self.interpolate_data(dataset, interpolate_function)  #
+        dataset, freq = self.interpolate_data(dataset, interpolate_function)
 
         print(len(dataset))
         # s_r = 0.01
         # s_data_len = int(s_r * len(dataset))
         # dataset = dataset[:s_data_len]
-        start_index = np.arange(0, len(dataset) - self.seq_len, self.hop_len)
+        start_index = np.arange(0, len(dataset) - self.seq_len // freq, self.hop_len // freq)
+        # print(len(dataset))
+        # print(self.seq_len / freq)
+        # print(self.hop_len / freq)
+        # print(start_index)
+        # exit()
 
         n_chunks = 8  # Number of chunks, can be adjusted
         chunks = np.array_split(start_index, n_chunks)  # 将start_timies平均切割为8份
-        args = [(chunk, dataset) for chunk in chunks]  # 将每份数据chunk、序列长度、最小长度、预测长度、全部控制器数据、全部数据组成元组，将各元组以列表形式保存到args中
+        args = [(chunk, dataset, freq) for chunk in chunks]  # 将每份数据chunk、序列长度、最小长度、预测长度、全部控制器数据、全部数据组成元组，将各元组以列表形式保存到args中
         with Pool() as pool:
             results = list(tqdm(pool.imap(self.process_chunk, args),
                                 total=len(chunks)))  # 将args传递给self.process_chunk函数在一个池中的独立进程上并行处理，处理结果保存到列表results中
@@ -248,7 +256,7 @@ class SmartHome(Dataset):
         y_new = f(ts_new)
         ts = pd.to_datetime(ts_new, unit='ns')
         df = pd.DataFrame({'ts': ts, 'd_value': y_new})
-        return df
+        return df, freq
 
 
 
