@@ -6,6 +6,7 @@ from module import recur
 
 def make_metric(split, **kwargs):
     data_name = kwargs['data_name']
+    print(f"metric-dataname:{data_name}")
     metric_name = {k: [] for k in split}
     if data_name in ['MNIST', 'FashionMNIST', 'SVHN', 'CIFAR10', 'CIFAR100']:
         best = -float('inf')
@@ -17,10 +18,20 @@ def make_metric(split, **kwargs):
         best = float('inf')
         best_direction = 'down'
         best_metric_name = 'Loss'
+        # for k in metric_name:
+        #     metric_name[k].extend(
+        #         ['Loss', 'MSE-ts', 'MSE-d~value', 'Accuracy-d~info', 'MSE-control-ts', 'MSE-control-d~value',
+        #          'Accuracy-control-d~info'])
         for k in metric_name:
             metric_name[k].extend(
-                ['Loss', 'MSE-ts', 'MSE-d~value', 'Accuracy-d~info', 'MSE-control-ts', 'MSE-control-d~value',
-                 'Accuracy-control-d~info'])
+                ['Loss', 'MSE'])
+    elif data_name in ['2011LS017']:
+        best = float('inf')
+        best_direction = 'down'
+        best_metric_name = 'Loss'
+        for k in metric_name:
+            metric_name[k].extend(
+                ['Loss', 'MSE'])
     else:
         raise ValueError('Not valid data name')
     metric = Metric(metric_name, best, best_direction, best_metric_name)
@@ -40,6 +51,13 @@ def Accuracy(output, target, topk=1):
 
 def MSE(output, target):
     with torch.no_grad():
+        mse = F.mse_loss(output, target).item()
+    return mse
+
+def mse_lstm1(target, output):
+    with torch.no_grad():
+        # target = target[:, -50:, 0]
+        # output = output[:, 0, -50:]
         mse = F.mse_loss(output, target).item()
     return mse
 
@@ -128,6 +146,10 @@ class Metric:
                                             lambda input, output: recur(acc_d_info, output['target'], input['data'],
                                                                         input['attention_mask'],
                                                                         input['control_mask']))}
+                elif m == 'MSE':
+                    metric[split][m] = {'mode': 'batch',
+                                        'metric': (
+                                            lambda input, output: recur(mse_lstm1, input['data'], output['target']))}
                 else:
                     raise ValueError('Not valid metric name')
         return metric
