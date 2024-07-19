@@ -35,7 +35,10 @@ def process_control():
     cfg['model']['resnet18'] = {'hidden_size': [64, 128, 256, 512]}
     cfg['model']['wresnet28x2'] = {'depth': 28, 'widen_factor': 2, 'drop_rate': 0.0}
     cfg['model']['wresnet28x8'] = {'depth': 28, 'widen_factor': 8, 'drop_rate': 0.0}
-    cfg['model']['lstm'] = {'hidden_size': 128, 'num_layers': 2}
+    cfg['model']['lstm'] = {'hidden_size': 128, 'num_layers': 2
+        , 'seq_len': 24 * 4 * 4
+        , 'label_len': 24 * 4
+        , 'pred_len': 24 * 4}
 
     cfg['model']['data_shape'] = data_shape[cfg['data_name']]
     cfg['model']['target_size'] = cfg['model']['data_shape'][0]
