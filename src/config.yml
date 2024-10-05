@@ -1,7 +1,7 @@
 ---
 # control
 control:
-  data_name: SmartHome-hh103-2011-D001~D002~D003
+  data_name: SmartHome-hh105-all-LS005
   model_name: lstm
 # experiment
 pin_memory: True

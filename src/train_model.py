@@ -41,21 +41,22 @@ def runExperiment():
     cfg['best_path'] = os.path.join(cfg['tag_path'], 'best')
     cfg['logger_path'] = os.path.join('output', 'logger', 'train', 'runs', cfg['tag'])
     cfg['tokenizer_path'] = os.path.join(cfg['path'], 'tokenizer')
-    # tokenizer = resume(os.path.join(cfg['tokenizer_path']))[cfg['data_name']]
+    # print(cfg['subset_name'])
+    # exit()
     dataset = make_dataset(cfg['data_name'], cfg['subset_name'])
     exit()
-    dataset = process_dataset(dataset, tokenizer)
-    model = make_model(tokenizer, cfg['model'])
+    print(dataset['train'][0]['data'])
+    print(dataset['train'][0]['data'].keys())  # x, y
     result = resume(cfg['checkpoint_path'], resume_mode=cfg['resume_mode'])
     if result is None:
         cfg['step'] = 0
-        model = model.to(cfg['device'])
+        model = make_model(cfg['model']).to(cfg['device'])
         optimizer = make_optimizer(model.parameters(), cfg[cfg['tag']]['optimizer'])
         scheduler = make_scheduler(optimizer, cfg[cfg['tag']]['optimizer'])
         logger = make_logger(cfg['logger_path'], data_name=cfg['data_name'])
     else:
         cfg['step'] = result['cfg']['step']
-        model = model.to(cfg['device'])
+        model = make_model(cfg['model']).to(cfg['device'])
         optimizer = make_optimizer(model.parameters(), cfg[cfg['tag']]['optimizer'])
         scheduler = make_scheduler(optimizer, cfg[cfg['tag']]['optimizer'])
         logger = make_logger(cfg['logger_path'], data_name=cfg['data_name'])
@@ -64,6 +65,7 @@ def runExperiment():
         scheduler.load_state_dict(result['scheduler'])
         logger.load_state_dict(result['logger'])
         logger.reset()
+
     data_loader = make_data_loader(dataset, cfg[cfg['tag']]['optimizer']['batch_size'], cfg['num_steps'],
                                    cfg['step'], cfg['step_period'], cfg['pin_memory'], cfg['num_workers'],
                                    cfg['collate_mode'], cfg['seed'])

@@ -13,7 +13,7 @@ from scipy.interpolate import interp1d
 class SmartHome(Dataset):
     data_name = 'SmartHome'
 
-    def __init__(self, root, split, subset, seq_len=24 * 4 * 4, hop_len=300, min_len=1, reprocess=False, label_len=24 * 4, pred_len=24 * 4, timeenc=0):
+    def __init__(self, root, split, subset, seq_len=1200, hop_len=300, min_len=1, reprocess=False):
         self.root = os.path.expanduser(root)  # 替换root中的~为当前系统的用户目录***
         self.split = split
         self.transform = None
@@ -23,29 +23,26 @@ class SmartHome(Dataset):
         self.hop_len = hop_len
         self.min_len = min_len
         self.reprocess = reprocess
-        self.label_len = label_len
-        self.pred_len = pred_len
-        self.timeenc = timeenc
         self.process()
         self.other = {}
 
     def parse_subset(self, subset):
         parsed_subset = []
-        processed_folder = self.processed_folder
+        preprocessed_folder = self.preprocessed_folder
         subset_list = subset.split('-')
         data_info_set = ['all', 'all', 'all']
         for i in range(len(subset_list)):
             data_info_set[i] = subset_list[i]
         room_info, year_info, device_info = data_info_set
         if room_info == 'all':
-            room_set = os.listdir(processed_folder)
+            room_set = os.listdir(preprocessed_folder)
         else:
             room_set = room_info.split('~')
 
         for room in room_set:
             if year_info == 'all':
                 year_set = []
-                filenames = os.listdir(os.path.join(processed_folder, room, 'year'))
+                filenames = os.listdir(os.path.join(preprocessed_folder, room, 'year'))
                 print(filenames)
                 for filename in filenames:
                     if filename.startswith('data_') and filename.endswith('.csv'):
@@ -56,7 +53,7 @@ class SmartHome(Dataset):
 
             if device_info == 'all':
                 device_set = []
-                filenames = os.listdir(os.path.join(processed_folder, room, 'year', 'device'))
+                filenames = os.listdir(os.path.join(preprocessed_folder, room, 'year', 'device'))
                 for filename in filenames:
                     if filename.startswith('data_') and filename.endswith('.csv'):
                         device_set_i = os.path.splitext(filename)[0].split('_')[2]
@@ -90,8 +87,7 @@ class SmartHome(Dataset):
         subset_index = bisect.bisect_left(self.length, index + 1)
         index_ = index if subset_index == 0 else index - self.length[subset_index - 1]
         subset = self.subset[subset_index]
-        # input = {'data': self.data[subset]['data'][index_], 't_start': self.data[subset]['t_start'][index_]}
-        input = {'data': self.data[subset]['data'][index_]}
+        input = {'data': self.data[subset]['data'][index_], 't_start': self.data[subset]['t_start'][index_]}
         if self.transform is not None:
             input = self.transform(input)
         return input
@@ -124,12 +120,13 @@ class SmartHome(Dataset):
 
             if not check_exists(data_path) or self.reprocess:  # 如果子集路径不存在，建立子集路径
                 makedir_exist_ok(data_path)
-                train_set, test_set = self.make_data(room_set, year_set, device_set)
-                save(train_set, os.path.join(data_path, 'train'))
-                save(test_set, os.path.join(data_path, 'test'))
+                self.make_data(room_set, year_set, device_set)
+
+                # save(train_set, os.path.join(data_path, 'train'))
+                # save(test_set, os.path.join(data_path, 'test'))
                 # save(train_set, os.path.join(data_path, 'meta'))
         # self.data, self.meta = self.load_data()
-        self.data = self.load_data()
+        # self.data = self.load_data()
         return
 
     def download(self):  # 抛出报错NotImplementedError
@@ -162,7 +159,7 @@ class SmartHome(Dataset):
         data = pd.read_csv(file_path)
         # data = pd.read_csv(os.path.join(self.raw_folder, room_set, 'data_{}.csv'.format(year_set)), delimiter=',')
 
-        subset_ratio = 0.5  # make it small for test
+        subset_ratio = 1.0  # make it small for test
         split_index = int(subset_ratio * len(data))
         data = data[:split_index]
 
@@ -170,104 +167,67 @@ class SmartHome(Dataset):
         data['ts'] = pd.to_datetime(data['ts'])
 
         # normalization
-        prefixes = ['LS', 'T0', 'T1']
-        data.loc[data['d_name'].str[:2].isin(prefixes), 'd_value'] = data.loc[data['d_name'].str[:2].isin(
-            prefixes), 'd_value'] / 100.0
+        # prefixes = ['LS', 'T0', 'T1']
+        # data.loc[data['d_name'].str[:2].isin(prefixes), 'd_value'] = data.loc[data['d_name'].str[:2].isin(
+        #     prefixes), 'd_value'] / 100.0
 
         print(f'-----------len(data): {len(data)}')
 
-        data = self.batchify(data)
-        print('batchify done')
-
-        indices = np.random.permutation(len(data['data']))
-        split_ratio = 0.9
-        split_index = int(split_ratio * len(data['data']))
-        train_indices = indices[:split_index]
-        test_indices = indices[split_index:]
-        train_data = {'data': [data['data'][i] for i in train_indices]}
-        test_data = {'data': [data['data'][i] for i in test_indices]}
-
-        print(f'-----------len(train_data): {len(train_data)}')
-        print(f'-----------len(test_data): {len(test_data)}')
-
-        return train_data, test_data
+        data = self.batchify(data, room_set, year_set, device_set)
+        # print(data['data'][:10])
+        # exit()
+        #
+        #
+        # indices = np.random.permutation(len(data['data']))
+        # split_ratio = 0.9
+        # split_index = int(split_ratio * len(data['data']))
+        # train_indices = indices[:split_index]
+        # test_indices = indices[split_index:]
+        # train_data = {'data': [data['data'][i] for i in train_indices]}
+        # test_data = {'data': [data['data'][i] for i in test_indices]}
+        #
+        # print(f'-----------len(train_data): {len(train_data)}')
+        # print(f'-----------len(test_data): {len(test_data)}')
+        #
+        # return train_data, test_data
 
     def process_chunk(self, chunk_args):
-        print('chunk start')
         chunk, dataset, freq = chunk_args  # 读取元组数据
         data = {'data': []}
-        num=1
-        for s_start in tqdm(chunk, desc="Processing chunk", leave=False):  # 遍历chunk中的start_times
-            # t_end = t_start + self.seq_len // freq
-            s_end = s_start + self.seq_len
-            data_i_x = dataset[s_start:s_end]  # 相当于time-llm的x
-            # 计算 data_i_y的index
-            r_begin = s_end - self.label_len
-            r_end = r_begin + self.label_len + self.pred_len
-            data_i_y = dataset[r_begin:r_end]
-            # data_i = data_i_x
-            data_i = {
-                'x': data_i_x,
-                'y': data_i_y
-            }
-            # print(data_i)
+        for t_start in tqdm(chunk, desc="Processing chunk", leave=False):  # 遍历chunk中的start_times
+            t_end = t_start + self.seq_len // freq
+            data_i = dataset[t_start:t_end]  # 以t_start为起点，t_end为终点，在dataset中获取data_i
             data['data'].append(data_i)  # 每个序列数据
-            # print(f'process_chunk done {num}')
-            num = num + 1
-        print('process_chunk done 1')
         return data
 
-    def batchify(self, dataset):
+    def batchify(self, dataset, room_set, year_set, device_set):
         interpolate_function = self.get_interpolate_function(dataset)
-        dataset, freq = self.interpolate_data(dataset, interpolate_function)
-        # 处理时间数据
-        data_stamp = dataset[['ts']]
-        # print('data_stamp: ', data_stamp)
-        data_stamp['ts'] = pd.to_datetime(data_stamp['ts'])
-        if self.timeenc == 0:
-            data_stamp['month'] = data_stamp['ts'].apply(lambda row: row.month)
-            data_stamp['day'] = data_stamp['ts'].apply(lambda row: row.day)
-            data_stamp['weekday'] = data_stamp['ts'].apply(lambda row: row.weekday())
-            data_stamp['hour'] = data_stamp['ts'].apply(lambda row: row.hour)
-            print(type(data_stamp))
-            data_stamp = data_stamp.drop(['ts'], axis=1)
-        elif self.timeenc == 1:
-            pass
-            # data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
-            # data_stamp = data_stamp.transpose(1, 0)
-        self.data_stamp = data_stamp
-
-        print(len(dataset))
-        # s_r = 0.01
-        # s_data_len = int(s_r * len(dataset))
-        # dataset = dataset[:s_data_len]
-        start_index = np.arange(0, len(dataset) - self.seq_len // freq, self.hop_len // freq)
-        # 定义可取到的index
-        start_index = np.arange(0, len(dataset) - (self.seq_len + self.pred_len))
-        # print(len(dataset))
-        # print(self.seq_len / freq)
-        # print(self.hop_len / freq)
-        # print(start_index)
+        dataset, freq = self.interpolate_data(dataset, interpolate_function, type='h', freq=300)
+        dataset.to_csv('./data/{}_{}_{}.csv'.format(room_set, year_set, device_set), index=False)  # 输出到TIMESNET的数据，之后手动放入TIMESNET处理
         # exit()
-
-        n_chunks = 8  # Number of chunks, can be adjusted
-        chunks = np.array_split(start_index, n_chunks)  # 将start_timies平均切割为8份
-        dataset = dataset.drop(['ts'], axis=1)
-        print(dataset)
-        args = [(chunk, dataset, freq) for chunk in chunks]  # 将每份数据chunk、序列长度、最小长度、预测长度、全部控制器数据、全部数据组成元组，将各元组以列表形式保存到args中
-        print('chunk go')
-        with Pool() as pool:
-            results = list(tqdm(pool.imap(self.process_chunk, args),
-                                total=len(chunks)))  # 将args传递给self.process_chunk函数在一个池中的独立进程上并行处理，处理结果保存到列表results中
-            print('chunk done 1')
-        print('chunk done')
-        # Combine results
-        data = {'data': []}
-        for result in results:
-            data['data'].extend(result['data'])
-        print('batchify return')
-
-        return data
+        # # print(len(dataset))
+        # # s_r = 0.01
+        # # s_data_len = int(s_r * len(dataset))
+        # # dataset = dataset[:s_data_len]
+        # start_index = np.arange(0, len(dataset) - self.seq_len // freq, self.hop_len // freq)
+        # # print(len(dataset))
+        # # print(self.seq_len / freq)
+        # # print(self.hop_len / freq)
+        # # print(start_index)
+        # # exit()
+        #
+        # n_chunks = 8  # Number of chunks, can be adjusted
+        # chunks = np.array_split(start_index, n_chunks)  # 将start_timies平均切割为8份
+        # args = [(chunk, dataset, freq) for chunk in chunks]  # 将每份数据chunk、序列长度、最小长度、预测长度、全部控制器数据、全部数据组成元组，将各元组以列表形式保存到args中
+        # with Pool() as pool:
+        #     results = list(tqdm(pool.imap(self.process_chunk, args),
+        #                         total=len(chunks)))  # 将args传递给self.process_chunk函数在一个池中的独立进程上并行处理，处理结果保存到列表results中
+        # # Combine results
+        # data = {'data': []}
+        # for result in results:
+        #     data['data'].extend(result['data'])
+        #
+        # return data
 
     @staticmethod
     def get_interpolate_function(dataset):
@@ -279,11 +239,11 @@ class SmartHome(Dataset):
         return f
 
     @staticmethod
-    def interpolate_data(df, f, freq=3600):
+    def interpolate_data(df, f, type='s', freq=1):
         addon = 1
         df_ts_max = df['ts'].astype(np.int64).values.max()
 
-        df_i = df['ts'].dt.floor('s')
+        df_i = df['ts'].dt.floor(type)
         df_i = df_i.astype(np.int64)
 
         start_ts = df_i.values.min()
@@ -298,7 +258,6 @@ class SmartHome(Dataset):
         y_new = f(ts_new)
         ts = pd.to_datetime(ts_new, unit='ns')
         df = pd.DataFrame({'ts': ts, 'd_value': y_new})
+        df = df.dropna()
+
         return df, freq
-
-
-

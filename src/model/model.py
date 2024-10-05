@@ -11,8 +11,8 @@ def make_tokenizer():
     return tokenizer
 
 
-def make_model(tokenizer, cfg):
-    base = model.base(tokenizer, cfg)
+def make_model(cfg):
+    base = model.lstm(cfg)
     return base
 
 
