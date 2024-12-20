@@ -8,7 +8,7 @@ import time
 
 
 class Preprocess:
-    def __init__(self, root_path, proj_name):
+    def __init__(self, root_path, proj_name, split_by='year'):
 
         # 路径
         self.root_path = root_path  # 根路径
@@ -27,10 +27,10 @@ class Preprocess:
         self.data_info_dict = self.load_data_info()  # 数据集信息
 
         # 处理数据
-        self.process_dataset()
+        self.process_dataset(split_by=split_by)
 
     # 初始化函数
-    def build_directory_structure_dict(self, sub_folders=('all', 'year')):
+    def build_directory_structure_dict(self, sub_folders=('all', 'year', 'device')):
 
         for dir_name in [self.root_path, self.proj_path, self.raw_data_path, self.processed_data_path]:
             if not os.path.exists(dir_name):
@@ -41,11 +41,7 @@ class Preprocess:
         for filename in filenames:
             dataset_dict = {}
             for sub_folder in sub_folders:
-                if sub_folder == 'year':
-                    dataset_dict[sub_folder] = {}
-                    dataset_dict[sub_folder]['device'] = []
-                else:
-                    dataset_dict[sub_folder] = []
+                dataset_dict[sub_folder] = []
             filename = filename.split('.')[0]
             self.dataset_names.append(filename)
             self.directory_structure[filename] = dataset_dict
@@ -78,7 +74,7 @@ class Preprocess:
             self.json_act(self.data_info_path, 'dump')
         return self.json_act(self.data_info_path, 'load')
 
-    def process_dataset(self, dataset_names=None):
+    def process_dataset(self, dataset_names=None, split_by='year'):
         dataset = []
         if dataset_names is None:
             dataset_names = self.dataset_names
@@ -89,15 +85,15 @@ class Preprocess:
             processed_dataset_path = os.path.join(self.processed_data_path, dataset_name)
             if os.path.exists(os.path.join(processed_dataset_path, 'env.csv')):
                 continue
-            
+
             column_indexes = data_info[dataset_name]['column_index']
             df_column_names = [key for key in column_indexes.keys()]
             df_column_index = [value for value in column_indexes.values()]
             dataset_path = os.path.join(self.raw_data_path, dataset_name + '.txt')
-            
+
             all_data_path = os.path.join(processed_dataset_path, 'all')
             year_data_path = os.path.join(processed_dataset_path, 'year')
-            device_data_path = os.path.join(year_data_path, 'device')
+            device_data_path = os.path.join(processed_dataset_path, 'device')
 
             print('\n\n=======Preprocessing dataset {}=======\n'.format(dataset_name))
 
@@ -132,26 +128,35 @@ class Preprocess:
             # 保存all文件夹下的data.csv
             df.to_csv(os.path.join(all_data_path, 'data.csv'), index=False)
 
-            # 按年份分割数据，并保存在year文件夹下
-            df['year'] = df['ts'].dt.year
-            unique_years = df['year'].unique()
-            for year in unique_years:
-                year_df = df[df['year'] == year].copy()
-                year_df.drop(columns=['year'], inplace=True)
-                year_df.to_csv(os.path.join(year_data_path, 'data_{}.csv'.format(year)), index=False)
-            df.drop(columns=['year'], inplace=True)
+            if split_by == 'year':
+                # 按年份分割数据，并保存在year文件夹下
+                df['year'] = df['ts'].dt.year
+                unique_years = df['year'].unique()
+                for year in unique_years:
+                    year_df = df[df['year'] == year].copy()
+                    year_df.drop(columns=['year'], inplace=True)
+                    year_df.to_csv(os.path.join(year_data_path, 'data_{}.csv'.format(year)), index=False)
+                df.drop(columns=['year'], inplace=True)
 
-            # 按d_name分割年份数据，并保存在device文件夹下
-            filenames = os.listdir(year_data_path)
-            for filename in filenames:
-                if filename.split('.')[-1] == 'csv':
-                    data = pd.read_csv(os.path.join(year_data_path, filename))
-                    for name in d_name:
-                        data_i = data[data['d_name'] == name]
-                        if not data_i.empty:
-                            save_path_i = os.path.join(device_data_path,
-                                                       '{}_{}.csv'.format(filename.split('.')[0], name))
-                            data_i.to_csv(save_path_i, index=False)
+                # 按d_name分割年份数据，并保存在device文件夹下
+                filenames = os.listdir(year_data_path)
+                for filename in filenames:
+                    if filename.split('.')[-1] == 'csv':
+                        data = pd.read_csv(os.path.join(year_data_path, filename))
+                        for name in d_name:
+                            data_i = data[data['d_name'] == name]
+                            if not data_i.empty:
+                                save_path_i = os.path.join(device_data_path,
+                                                           '{}_{}.csv'.format(filename.split('.')[0], name))
+                                data_i.to_csv(save_path_i, index=False)
+            elif split_by == 'd_name':
+                # 直接按照d_name分割数据
+                for name in d_name:
+                    data_i = df[df['d_name'] == name]
+                    if not data_i.empty:
+                        save_path_i = os.path.join(device_data_path, 'data_{}.csv'.format(name))
+                        data_i.to_csv(save_path_i, index=False)
+
             print('=======Preprocessing Finished=======\n\n'.format(dataset_name))
 
     def process_env(self, dataset_name, d_name):
@@ -161,17 +166,17 @@ class Preprocess:
         room_names = self.json_act(self.data_info_path, 'load')[dataset_name]['rooms']
 
         sensor_trans_dict = {
-            'D0': {'level': 2, 'd_type': 'sensor', 'd_func': 'door'},
-            'LS': {'level': 2, 'd_type': 'sensor', 'd_func': 'light'},
-            'M0': {'level': 2, 'd_type': 'sensor', 'd_func': 'motion'},
-            'MA': {'level': 2, 'd_type': 'sensor', 'd_func': 'ambient'},
-            'T0': {'level': 2, 'd_type': 'sensor', 'd_func': 'temperature'},
-            'T1': {'level': 2, 'd_type': 'sensor', 'd_func': 'temperature'},
-            'L0': {'level': 2, 'd_type': 'sensor', 'd_func': 'lamp'},
-            'Bu': {'level': 3, 'd_type': 'controller', 'd_func': 'button'}
+            'D0': {'level': 2, 'd_type': 'sensor', 'd_func': 'door', 'lt': 'cls'},
+            'LS': {'level': 2, 'd_type': 'sensor', 'd_func': 'light', 'lt': 'reg'},
+            'M0': {'level': 2, 'd_type': 'sensor', 'd_func': 'motion', 'lt': 'cls'},
+            'MA': {'level': 2, 'd_type': 'sensor', 'd_func': 'ambient', 'lt': 'cls'},
+            'T0': {'level': 2, 'd_type': 'sensor', 'd_func': 'temperature', 'lt': 'reg'},
+            'T1': {'level': 2, 'd_type': 'sensor', 'd_func': 'temperature', 'lt': 'reg'},
+            'L0': {'level': 2, 'd_type': 'sensor', 'd_func': 'lamp', 'lt': 'cls'},
+            'Bu': {'level': 3, 'd_type': 'controller', 'd_func': 'button', 'lt': 'cls'}
         }
 
-        df = pd.DataFrame(columns=['level', 'd_name', 'd_type', 'd_func'])
+        df = pd.DataFrame(columns=['level', 'd_name', 'd_type', 'd_func', 'lt'])
 
         for name in d_name:
             matched_key = None
@@ -428,4 +433,4 @@ class DataframeWasher:
 
 
 if __name__ == '__main__':
-    data_preprocess = Preprocess('data', 'SmartHome')
+    pass
