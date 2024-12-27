@@ -368,7 +368,7 @@ class Preprocess:
         for i, file in enumerate(csv_files):
             f = self.get_interpolate_function(dfs[i])
             df_filtered = self.interpolate_data(f, common_start, common_end, freq=300)
-            df_filtered.to_csv(os.path.join(output_path, file))
+            df_filtered.to_csv(os.path.join(output_path, file), index=False)
 
 
     @staticmethod
