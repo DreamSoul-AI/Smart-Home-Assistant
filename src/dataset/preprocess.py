@@ -4,13 +4,150 @@ import os
 import pandas as pd
 import json
 import re
-import time
+
+from scipy.interpolate import interp1d
+import numpy as np
+
+
+data_wash_dict = {
+    0: {
+        'action_type': 'drop',
+        'sub_action_type': 'contain',
+        'column_name': 'd_value',
+        'condition': {
+            'c_column_name': None,
+            'c_type': None,
+            'c_value1': None,
+            'c_value2': None
+        },
+        'input_value': ['TAP_COUNT', 'HOLD_DEPRESS', 'HOLD_RELEASE', 'RELEASE']
+    },
+    1: {
+        'action_type': 'replace',
+        'sub_action_type': 'equal',
+        'column_name': 'd_value',
+        'condition': {
+            'c_column_name': None,
+            'c_type': None,
+            'c_value1': None,
+            'c_value2': None
+        },
+        'input_value': {"ON": 1.0, "OFF": 0.0, "OPEN": 1.0, "CLOSE": 0.0}
+    },
+    2: {
+        'action_type': 'drop',
+        'sub_action_type': 'contain',
+        'column_name': 'd_name',
+        'condition': {
+            'c_column_name': None,
+            'c_type': None,
+            'c_value1': None,
+            'c_value2': None
+        },
+        'input_value': ['BATP', 'ZB', 'HOME']
+    },
+    3: {
+        'action_type': 'drop',
+        'sub_action_type': 'equal',
+        'column_name': 'd_name',
+        'condition': {
+            'c_column_name': None,
+            'c_type': None,
+            'c_value1': None,
+            'c_value2': None
+        },
+        'input_value': ['c'],
+        'target_value': []
+    },
+    4: {
+        'action_type': 'replace',
+        'sub_action_type': 'c_equal',
+        'column_name': 'd_value',
+        'condition': {
+            'c_column_name': 'd_name',
+            'c_type': 'contain',
+            'c_value1': ['ButtonDown'],
+            'c_value2': None
+        },
+        'input_value': 0.0
+    },
+    5: {
+        'action_type': 'replace',
+        'sub_action_type': 'c_equal',
+        'column_name': 'd_value',
+        'condition': {
+            'c_column_name': 'd_name',
+            'c_type': 'contain',
+            'c_value1': ['ButtonUp'],
+            'c_value2': None
+        },
+        'input_value': 1.0
+    },
+    6: {
+        'action_type': 'replace',
+        'sub_action_type': 'contain',
+        'column_name': 'd_name',
+        'condition': {
+            'c_column_name': None,
+            'c_type': None,
+            'c_value1': None,
+            'c_value2': None
+        },
+        'input_value': {'ButtonUp': 'Button', 'ButtonDown': 'Button'}
+    },
+    7: {
+        'action_type': 'replace',
+        'sub_action_type': 'c_equal',
+        'column_name': 'd_value',
+        'condition': {
+            'c_column_name': 'd_name',
+            'c_type': 'contain',
+            'c_value1': ['L0'],
+            'c_value2': None
+        },
+        'input_value': {'100': '1'}
+    },
+    8: {
+        'action_type': 'drop',
+        'sub_action_type': 'cant_trans_to_num',
+        'column_name': 'd_value',
+        'condition': {
+            'c_column_name': None,
+            'c_type': None,
+            'c_value1': None,
+            'c_value2': None
+        },
+        'input_value': None
+    },
+    9: {
+        'action_type': 'trans',
+        'sub_action_type': 'value_type',
+        'column_name': 'd_name',
+        'condition': {
+            'c_column_name': None,
+            'c_type': None,
+            'c_value1': None,
+            'c_value2': None
+        },
+        'input_value': 'str'
+    },
+    10: {
+        'action_type': 'trans',
+        'sub_action_type': 'value_type',
+        'column_name': 'd_value',
+        'condition': {
+            'c_column_name': None,
+            'c_type': None,
+            'c_value1': None,
+            'c_value2': None
+        },
+        'input_value': float
+    }
+}
 
 
 class Preprocess:
     def __init__(self, root_path, proj_name, split_by='year'):
-
-        # 路径
         self.root_path = root_path  # 根路径
         self.proj_path = os.path.join(root_path, proj_name)  # 项目路径
         self.raw_data_path = os.path.join(self.proj_path, 'raw')  # 原始数据路径
@@ -83,8 +220,6 @@ class Preprocess:
 
         for dataset_name in dataset_names:
             processed_dataset_path = os.path.join(self.processed_data_path, dataset_name)
-            if os.path.exists(os.path.join(processed_dataset_path, 'env.csv')):
-                continue
 
             column_indexes = data_info[dataset_name]['column_index']
             df_column_names = [key for key in column_indexes.keys()]
@@ -93,7 +228,7 @@ class Preprocess:
 
             all_data_path = os.path.join(processed_dataset_path, 'all')
             year_data_path = os.path.join(processed_dataset_path, 'year')
-            device_data_path = os.path.join(processed_dataset_path, 'device')
+            output_path = os.path.join(processed_dataset_path, 'device')
 
             print('\n\n=======Preprocessing dataset {}=======\n'.format(dataset_name))
 
@@ -112,7 +247,7 @@ class Preprocess:
             # df['ts'] = self.round_timestamp(df['ts'])
 
             # 数据清洗
-            data_washer = DataframeWasher(self.data_wash_dict)
+            data_washer = DataframeWasher(data_wash_dict)
             df = data_washer.wash(df)
 
             ## 查看异常的str数据
@@ -123,7 +258,8 @@ class Preprocess:
             d_name = df['d_name'].drop_duplicates().sort_values().tolist()  # 传感器名称 list
 
             # 保存env.csv
-            self.process_env(dataset_name, d_name)
+            if not os.path.exists(os.path.join(processed_dataset_path, 'env.csv')):
+                self.process_env(dataset_name, d_name)
 
             # 保存all文件夹下的data.csv
             df.to_csv(os.path.join(all_data_path, 'data.csv'), index=False)
@@ -146,16 +282,19 @@ class Preprocess:
                         for name in d_name:
                             data_i = data[data['d_name'] == name]
                             if not data_i.empty:
-                                save_path_i = os.path.join(device_data_path,
+                                save_path_i = os.path.join(output_path,
                                                            '{}_{}.csv'.format(filename.split('.')[0], name))
                                 data_i.to_csv(save_path_i, index=False)
-            elif split_by == 'd_name':
+            if split_by == 'd_name':
                 # 直接按照d_name分割数据
                 for name in d_name:
                     data_i = df[df['d_name'] == name]
                     if not data_i.empty:
-                        save_path_i = os.path.join(device_data_path, 'data_{}.csv'.format(name))
+                        save_path_i = os.path.join(output_path, 'data_{}.csv'.format(name))
                         data_i.to_csv(save_path_i, index=False)
+
+            common_ts_path = os.path.join(processed_dataset_path, 'common_ts')
+            self.process_csv_files(output_path, common_ts_path)
 
             print('=======Preprocessing Finished=======\n\n'.format(dataset_name))
 
@@ -197,144 +336,71 @@ class Preprocess:
         df.to_csv(os.path.join(self.processed_data_path, dataset_name, 'env.csv'), index=False)
         return
 
-    @property
-    def data_wash_dict(self):
-        wash_dict = {
-            0: {
-                'action_type': 'drop',
-                'sub_action_type': 'contain',
-                'column_name': 'd_value',
-                'condition': {
-                    'c_column_name': None,
-                    'c_type': None,
-                    'c_value1': None,
-                    'c_value2': None
-                },
-                'input_value': ['TAP_COUNT', 'HOLD_DEPRESS', 'HOLD_RELEASE', 'RELEASE']
-            },
-            1: {
-                'action_type': 'replace',
-                'sub_action_type': 'equal',
-                'column_name': 'd_value',
-                'condition': {
-                    'c_column_name': None,
-                    'c_type': None,
-                    'c_value1': None,
-                    'c_value2': None
-                },
-                'input_value': {"ON": 1.0, "OFF": 0.0, "OPEN": 1.0, "CLOSE": 0.0}
-            },
-            2: {
-                'action_type': 'drop',
-                'sub_action_type': 'contain',
-                'column_name': 'd_name',
-                'condition': {
-                    'c_column_name': None,
-                    'c_type': None,
-                    'c_value1': None,
-                    'c_value2': None
-                },
-                'input_value': ['BATP', 'ZB', 'HOME']
-            },
-            3: {
-                'action_type': 'drop',
-                'sub_action_type': 'equal',
-                'column_name': 'd_name',
-                'condition': {
-                    'c_column_name': None,
-                    'c_type': None,
-                    'c_value1': None,
-                    'c_value2': None
-                },
-                'input_value': ['c'],
-                'target_value': []
-            },
-            4: {
-                'action_type': 'replace',
-                'sub_action_type': 'c_equal',
-                'column_name': 'd_value',
-                'condition': {
-                    'c_column_name': 'd_name',
-                    'c_type': 'contain',
-                    'c_value1': ['ButtonDown'],
-                    'c_value2': None
-                },
-                'input_value': 0.0
-            },
-            5: {
-                'action_type': 'replace',
-                'sub_action_type': 'c_equal',
-                'column_name': 'd_value',
-                'condition': {
-                    'c_column_name': 'd_name',
-                    'c_type': 'contain',
-                    'c_value1': ['ButtonUp'],
-                    'c_value2': None
-                },
-                'input_value': 1.0
-            },
-            6: {
-                'action_type': 'replace',
-                'sub_action_type': 'contain',
-                'column_name': 'd_name',
-                'condition': {
-                    'c_column_name': None,
-                    'c_type': None,
-                    'c_value1': None,
-                    'c_value2': None
-                },
-                'input_value': {'ButtonUp': 'Button', 'ButtonDown': 'Button'}
-            },
-            7: {
-                'action_type': 'replace',
-                'sub_action_type': 'c_equal',
-                'column_name': 'd_value',
-                'condition': {
-                    'c_column_name': 'd_name',
-                    'c_type': 'contain',
-                    'c_value1': ['L0'],
-                    'c_value2': None
-                },
-                'input_value': {'100': '1'}
-            },
-            8: {
-                'action_type': 'drop',
-                'sub_action_type': 'cant_trans_to_num',
-                'column_name': 'd_value',
-                'condition': {
-                    'c_column_name': None,
-                    'c_type': None,
-                    'c_value1': None,
-                    'c_value2': None
-                },
-                'input_value': None
-            },
-            9: {
-                'action_type': 'trans',
-                'sub_action_type': 'value_type',
-                'column_name': 'd_name',
-                'condition': {
-                    'c_column_name': None,
-                    'c_type': None,
-                    'c_value1': None,
-                    'c_value2': None
-                },
-                'input_value': 'str'
-            },
-            10: {
-                'action_type': 'trans',
-                'sub_action_type': 'value_type',
-                'column_name': 'd_value',
-                'condition': {
-                    'c_column_name': None,
-                    'c_type': None,
-                    'c_value1': None,
-                    'c_value2': None
-                },
-                'input_value': float
-            }
-        }
-        return wash_dict
+    def process_csv_files(self, file_path, output_path, date_col='ts'):
+        # 确保输出目录存在
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+
+        # 获取输入目录下所有csv文件列表
+        csv_files = [f for f in os.listdir(file_path) if f.endswith('.csv')]
+
+        # 存储所有数据框和它们对应的最小最大日期
+        dfs = []
+        min_max_dates = []
+
+        # 读取csv文件并转换日期时间列为datetime类型
+        for file in csv_files:
+            df_path = os.path.join(file_path, file)
+            df = pd.read_csv(df_path, parse_dates=[date_col])
+            dfs.append(df)
+            min_max_dates.append((df[date_col].min(), df[date_col].max()))
+
+        # 找到所有文件中日期时间重叠的部分
+        common_start = max(min_date for min_date, _ in min_max_dates)
+        common_end = min(max_date for _, max_date in min_max_dates)
+
+        # 如果没有重叠的时间段，则返回
+        if common_start > common_end:
+            print("No overlapping time periods found.")
+            return
+
+        # 仅保留重叠时间段内的数据，并保存到新的目录
+        for i, file in enumerate(csv_files):
+            f = self.get_interpolate_function(dfs[i])
+            df_filtered = self.interpolate_data(f, common_start, common_end, freq=300)
+            df_filtered.to_csv(os.path.join(output_path, file))
+
+
+    @staticmethod
+    def get_interpolate_function(dataset):
+        data = dataset.copy()
+        data['ts'] = data['ts'].astype(np.int64)
+        x = data['ts'].values
+        y = data['d_value'].values
+        f = interp1d(x, y, kind='previous', bounds_error=False, fill_value=np.nan)
+        return f
+
+    @staticmethod
+    def interpolate_data(f, start_ts, end_ts, freq=1, ttype='T'):
+        start_ts = start_ts.floor(ttype)
+        end_ts = end_ts.floor(ttype)
+
+        start_ts = start_ts.value
+        end_ts = end_ts.value
+
+        s_to_ns = 1_000_000_000  # 每秒的纳秒数
+        step_ns = freq * s_to_ns
+
+        start_ts += step_ns
+        end_ts += step_ns
+
+        ts_new = np.arange(start_ts, end_ts, step_ns)
+
+        y_new = f(ts_new)
+        ts = pd.to_datetime(ts_new, unit='ns')
+        df = pd.DataFrame({'ts': ts, 'd_value': y_new})
+
+        return df
 
     @staticmethod
     def json_act(path, action, content=None):
