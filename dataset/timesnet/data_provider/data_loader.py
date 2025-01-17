@@ -4,14 +4,17 @@ import pandas as pd
 import glob
 import re
 import torch
-from torch.utils.data import Dataset, DataLoader
+from sktime.networks.ltsf.models import transformers
+from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from sklearn.preprocessing import StandardScaler
+
 from utils.timefeatures import time_features
 from data_provider.m4 import M4Dataset, M4Meta
 from data_provider.uea import subsample, interpolate_missing, Normalizer
 from sktime.datasets import load_from_tsfile_to_dataframe
 import warnings
 from utils.augmentation import run_augmentation_single
+from sentence_transformers import SentenceTransformer
 
 warnings.filterwarnings('ignore')
 
@@ -79,7 +82,7 @@ class Dataset_ETT_hour(Dataset):
             data_stamp = df_stamp.drop(['date'], 1).values
         elif self.timeenc == 1:
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
-            data_stamp = data_stamp.transpose(1, 0) 
+            data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
@@ -748,13 +751,11 @@ class UEAloader(Dataset):
         return len(self.all_IDs)
 
 
-class Aiot_m5(Dataset):
-    def __init__(self, args, root_path, flag='train', size=None,
-                 features='S', data_path='hh105_2012_LS005_5min.csv',
-                 target='OT', scale=True, timeenc=0, freq='t', seasonal_patterns=None):
-        # size [seq_len, label_len, pred_len]
+class Aiot(Dataset):
+    def __init__(self, args, root_path, data_path, flag='train', size=None,
+                 features='S', target='d_value', scale=True, timeenc=0, freq='t', seasonal_patterns=None):
+        # root_path = f'data/SmartHome/preprocessed/hh105'
         self.args = args
-        # info
         if size == None:
             self.seq_len = 24 * 4 * 4
             self.label_len = 24 * 4
@@ -763,10 +764,13 @@ class Aiot_m5(Dataset):
             self.seq_len = size[0]
             self.label_len = size[1]
             self.pred_len = size[2]
-        # init
+
         assert flag in ['train', 'test', 'val']
         type_map = {'train': 0, 'val': 1, 'test': 2}
         self.set_type = type_map[flag]
+
+        self.root_path = root_path
+        self.data_path = data_path
 
         self.features = features
         self.target = target
@@ -774,17 +778,20 @@ class Aiot_m5(Dataset):
         self.timeenc = timeenc
         self.freq = freq
 
-        self.root_path = root_path
-        self.data_path = data_path
+        self.zero_transformed_value = None
+
         self.__read_data__()
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        df_raw = pd.read_csv(os.path.join(self.root_path,
-                                          self.data_path))
+        df_raw = pd.read_csv(os.path.join(self.root_path, 'common_ts', self.data_path))
+        df_len = len(df_raw)
+        train_size = int(df_len * 0.6)
+        val_size = int(df_len * 0.2)
 
-        border1s = [0, 12 * 30 * 24 * 12 - self.seq_len, 12 * 30 * 24 * 12 + 4 * 30 * 24 * 12 - self.seq_len]
-        border2s = [12 * 30 * 24 * 12, 12 * 30 * 24 * 12 + 4 * 30 * 24 * 12, 12 * 30 * 24 * 12 + 8 * 30 * 24 * 12]
+        border1s = [0, train_size, train_size + val_size]
+        border2s = [train_size - self.seq_len, train_size + val_size - self.seq_len, df_len - self.seq_len]
+
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -798,21 +805,21 @@ class Aiot_m5(Dataset):
             train_data = df_data[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
+            self.zero_transformed_value = self.scaler.transform([[0]])[0][0]
         else:
             data = df_data.values
 
-        df_stamp = df_raw[['date']][border1:border2]
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        df_stamp = df_raw[['ts']][border1:border2]
+        df_stamp['ts'] = pd.to_datetime(df_stamp.ts)
         if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
-            df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
-            data_stamp = df_stamp.drop(['date'], 1).values
+            df_stamp['month'] = df_stamp.ts.apply(lambda row: row.month, 1)
+            df_stamp['day'] = df_stamp.ts.apply(lambda row: row.day, 1)
+            df_stamp['weekday'] = df_stamp.ts.apply(lambda row: row.weekday(), 1)
+            df_stamp['hour'] = df_stamp.ts.apply(lambda row: row.hour, 1)
+            df_stamp['minute'] = df_stamp.ts.apply(lambda row: row.minute, 1)
+            data_stamp = df_stamp.drop(['ts'], 1).values
         elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = time_features(pd.to_datetime(df_stamp['ts'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
@@ -834,10 +841,60 @@ class Aiot_m5(Dataset):
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
 
-        return seq_x, seq_y, seq_x_mark, seq_y_mark
+        return seq_x, seq_y, seq_x_mark, seq_y_mark, self.data_info
 
     def __len__(self):
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
+    def get_device_name(self):
+        return self.data_path.replace('data_', '').replace('.csv', '')
+
+    def get_task_name(self):
+        df = pd.read_csv(os.path.join(self.root_path, 'env.csv'))
+        lt = df.loc[df['d_name'] == self.device_name, 'lt'].item()
+        return lt
+
+    def sentence_embedding(self, sentence):
+        model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+        embeddings = model.encode(sentence)
+        print(embeddings.shape, type(embeddings))
+        return embeddings
+
+    @property
+    def data_info(self):
+        self.device_name = self.get_device_name()
+        self.task_name = self.get_task_name()
+        data_dict = dict(
+            device_name='device ID:' + self.device_name,
+            task_name=self.task_name,
+            zero_transformed_value=self.zero_transformed_value
+        )
+        return data_dict
+
+
+# class CustomConcatDataset(ConcatDataset):
+#     def __init__(self, datasets):
+#         super(CustomConcatDataset, self).__init__(datasets)
+#         # 保存每个数据集的构造函数属性
+#         self.dataset_attrs = [dataset.zero_transformed_value for dataset in datasets]
+#         for dataset in datasets:
+#             print(len(dataset))
+#
+#     def get_dataset_attr(self, index):
+#         """根据数据点索引返回对应的子数据集构造函数属性"""
+#         # 找到数据点属于哪个子数据集
+#         dataset_idx, _ = self._find_dataset_idx(index)
+#         return self.dataset_attrs[dataset_idx]
+#
+#     def _find_dataset_idx(self, index):
+#         """辅助函数：找到给定索引对应的数据集索引及其内部索引"""
+#         offset = 0
+#         for dataset_idx, dataset in enumerate(self.datasets):
+#             if index < offset + len(dataset):
+#                 return dataset_idx, index - offset
+#             offset += len(dataset)
+#         raise IndexError("Index out of bounds")
+
