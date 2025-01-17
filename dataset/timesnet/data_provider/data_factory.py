@@ -1,7 +1,7 @@
 from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_M4, PSMSegLoader, \
-    MSLSegLoader, SMAPSegLoader, SMDSegLoader, SWATSegLoader, UEAloader, Aiot_m5
+    MSLSegLoader, SMAPSegLoader, SMDSegLoader, SWATSegLoader, UEAloader, Aiot
 from data_provider.uea import collate_fn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 
 data_dict = {
     'ETTh1': Dataset_ETT_hour,
@@ -16,7 +16,7 @@ data_dict = {
     'SMD': SMDSegLoader,
     'SWAT': SWATSegLoader,
     'UEA': UEAloader,
-    'AIOTm5': Aiot_m5
+    'AIOT': Aiot
 }
 
 
@@ -65,23 +65,29 @@ def data_provider(args, flag):
     else:
         if args.data == 'm4':
             drop_last = False
-        data_set = Data(
-            args = args,
-            root_path=args.root_path,
-            data_path=args.data_path,
-            flag=flag,
-            size=[args.seq_len, args.label_len, args.pred_len],
-            features=args.features,
-            target=args.target,
-            timeenc=timeenc,
-            freq=freq,
-            seasonal_patterns=args.seasonal_patterns
-        )
-        print(flag, len(data_set))
+        data_path_list = args.data_path.split(',')
+        multi_data_set = []
+        for data_path in data_path_list:
+            data_set = Data(
+                args = args,
+                root_path=args.root_path,
+                data_path=data_path,
+                flag=flag,
+                size=[args.seq_len, args.label_len, args.pred_len],
+                features=args.features,
+                target=args.target,
+                timeenc=timeenc,
+                freq=freq,
+                seasonal_patterns=args.seasonal_patterns
+            )
+            multi_data_set.append(data_set)
+
+        combine_data_set = ConcatDataset(multi_data_set)
+
         data_loader = DataLoader(
-            data_set,
+            combine_data_set,
             batch_size=batch_size,
             shuffle=shuffle_flag,
             num_workers=args.num_workers,
             drop_last=drop_last)
-        return data_set, data_loader
+        return combine_data_set, data_loader
