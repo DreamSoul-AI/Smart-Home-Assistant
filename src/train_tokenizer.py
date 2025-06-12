@@ -35,11 +35,16 @@ def runExperiment():
     torch.cuda.manual_seed(cfg['seed'])
     cfg['path'] = os.path.join('output', 'exp')
     cfg['tokenizer_path'] = os.path.join(cfg['path'], 'tokenizer')
-    cfg['env_path'] = os.path.join('data', cfg['data_name'], 'raw', cfg['subset_name'].split('~')[0], 'env.csv')
+    room_name = cfg['subset_name'].split('-')[0]
+    cfg['env_path'] = os.path.join('data', cfg['data_name'], 'raw', room_name, 'env.csv')
     tokenizer = make_tokenizer()
     tokenizer.train(True)
 
     # ------------------------------------------------------------
+    print(f"DEBUG: env_path = {cfg['env_path']}")
+    print(f"DEBUG: env_path exists = {os.path.exists(cfg['env_path'])}")
+    print(f"DEBUG: reprocess = {reprocess}")
+    
     if os.path.exists(cfg['env_path']) and not reprocess:
         env = pd.read_csv(cfg['env_path'], delimiter=',')
         env = env[env['level'] != 1]

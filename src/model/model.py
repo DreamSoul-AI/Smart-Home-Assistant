@@ -12,7 +12,10 @@ def make_tokenizer():
 
 
 def make_model(cfg):
-    base = model.lstm(cfg)
+    if cfg['model_name'] == 'lstm':
+        base = model.lstm(cfg)
+    else:
+        base = model.lstm(cfg)
     return base
 
 

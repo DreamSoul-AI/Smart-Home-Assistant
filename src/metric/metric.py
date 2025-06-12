@@ -149,7 +149,7 @@ class Metric:
                 elif m == 'MSE':
                     metric[split][m] = {'mode': 'batch',
                                         'metric': (
-                                            lambda input, output: recur(mse_lstm1, input['data'], output['target']))}
+                                            lambda input, output: F.mse_loss(output['predicted_steps'], output['target']).item() if 'predicted_steps' in output and 'target' in output else 0.0)}
                 else:
                     raise ValueError('Not valid metric name')
         return metric

@@ -12,7 +12,7 @@ def process_control():
     cfg['step_period'] = 1
     cfg['num_steps'] = 800
     cfg['eval_period'] = 200
-    cfg['num_epochs'] = 10
+    cfg['num_epochs'] = 1 #改过
     cfg['collate_mode'] = 'dict'
     cfg['embedding_size'] = 768 + 2
     cfg['max_length'] = 512
@@ -21,11 +21,14 @@ def process_control():
     cfg['model'] = {}
     cfg['model']['model_name'] = cfg['model_name']
     data_shape = {'MNIST': [1, 28, 28], 'FashionMNIST': [1, 28, 28], 'SVHN': [3, 32, 32], 'CIFAR10': [3, 32, 32],
-                  'CIFAR100': [3, 32, 32], 'SmartHome': [cfg['embedding_size'], cfg['max_length']]}
+                  'CIFAR100': [3, 32, 32], 'SmartHome': [cfg['batch_size'], 384, 3]}
     target_size = {'MNIST': 10, 'FashionMNIST': 10, 'SVHN': 10, 'CIFAR10': 10, 'CIFAR100': 100,
-                   'SmartHome': cfg['embedding_size']}
+                   'SmartHome': 1}  # SmartHome的目标是预测单个值
     cfg['model']['data_shape'] = data_shape[cfg['data_name']]
-    cfg['model']['target_size'] = target_size[cfg['data_name']]
+    if cfg['data_name'] == 'SmartHome':
+        cfg['model']['target_size'] = 1  # SmartHome的预测目标是单个值
+    else:
+        cfg['model']['target_size'] = cfg['model']['data_shape'][0]
     cfg['model']['embedding_size'] = cfg['embedding_size']
 
     cfg['model']['linear'] = {}
@@ -39,9 +42,6 @@ def process_control():
         , 'seq_len': 24 * 4 * 4
         , 'label_len': 24 * 4
         , 'pred_len': 24 * 4}
-
-    cfg['model']['data_shape'] = data_shape[cfg['data_name']]
-    cfg['model']['target_size'] = cfg['model']['data_shape'][0]
 
     cfg['model']['base'] = {}
     cfg['model']['base']['encoder'] = {'embedding_size': cfg['embedding_size']}

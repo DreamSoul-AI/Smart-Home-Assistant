@@ -35,6 +35,14 @@ def runExperiment():
     cfg['seed'] = int(cfg['tag'].split('_')[0])
     torch.manual_seed(cfg['seed'])
     torch.cuda.manual_seed(cfg['seed'])
+    
+    # 自动检测可用设备
+    if cfg['device'] == 'cuda' and not torch.cuda.is_available():
+        print("CUDA不可用，使用CPU")
+        cfg['device'] = 'cpu'
+    else:
+        print(f"使用设备: {cfg['device']}")
+    
     cfg['path'] = os.path.join('output', 'exp')
     cfg['tag_path'] = os.path.join(cfg['path'], cfg['tag'])
     cfg['checkpoint_path'] = os.path.join(cfg['tag_path'], 'checkpoint')
@@ -44,9 +52,68 @@ def runExperiment():
     # print(cfg['subset_name'])
     # exit()
     dataset = make_dataset(cfg['data_name'], cfg['subset_name'])
-    exit()
-    print(dataset['train'][0]['data'])
-    print(dataset['train'][0]['data'].keys())  # x, y
+    # exit()  # 注释掉调试用的exit语句
+    # print(dataset['train'][0]['data'])  # 注释掉调试代码
+    # print(dataset['train'][0]['data'].keys())  # x, y
+    
+    # 加载tokenizer并处理数据集
+    # 设置必要的配置项
+    if 'max_length' not in cfg:
+        cfg['max_length'] = 'longest'  # 或者设置一个具体的值如512
+    if 'batch_size' not in cfg:
+        cfg['batch_size'] = 32
+    if 'num_epochs' not in cfg:
+        cfg['num_epochs'] = 10
+    if 'collate_mode' not in cfg:
+        cfg['collate_mode'] = 'dict'
+    if 'step_period' not in cfg:
+        cfg['step_period'] = 1
+        
+    tokenizer = resume(os.path.join(cfg['tokenizer_path']))[cfg['data_name']]
+    dataset = process_dataset(dataset, tokenizer)
+    
+    # 设置默认的优化器配置
+    if cfg['tag'] not in cfg:
+        cfg[cfg['tag']] = {}
+    if 'optimizer' not in cfg[cfg['tag']]:
+        cfg[cfg['tag']]['optimizer'] = {
+            'lr': 0.001,
+            'batch_size': {'train': 32, 'test': 32},
+            'step_size': 10,
+            'gamma': 0.1,
+            'momentum': 0.9,
+            'weight_decay': 0.0001,
+            'betas': (0.9, 0.999),
+            'optimizer_name': 'Adam',
+            'scheduler_name': 'StepLR',
+            'factor': 0.1,
+            'nesterov': False
+        }
+    
+    # 设置模型配置
+    if 'model' not in cfg:
+        cfg['model'] = {
+            'name': 'lstm',
+            'input_dim': 3,  # 时间戳、数值、设备编码
+            'hidden_dim': 128,
+            'num_layers': 2,
+            'output_dim': 1,
+            'dropout': 0.1
+        }
+    
+    # 添加LSTM所需的配置
+    cfg['data_shape'] = (cfg['batch_size'], 384, 3)  # 批次大小、序列长度、特征维度
+    cfg['target_size'] = 1  # 预测目标维度
+    
+    if 'lstm' not in cfg:
+        cfg['lstm'] = {
+            'hidden_size': 128,
+            'num_layers': 2,
+            'seq_len': 384,    # 输入序列长度
+            'label_len': 96,   # 标签长度
+            'pred_len': 96     # 预测长度
+        }
+    
     result = resume(cfg['checkpoint_path'], resume_mode=cfg['resume_mode'])
     if result is None:
         cfg['step'] = 0

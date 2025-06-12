@@ -37,38 +37,46 @@ class LSTM(nn.Module):
         print(f"label_len:{self.label_len}")
         print(f"pred_len:{self.pred_len}")
         output = {}
-        print(f'lstm.input:{input}')
+        # print(f'lstm.input:{input}')  # 注释掉这行，避免打印整个数据张量
         input['data'] = input['data'].float()
+        
+        # 提取输入序列的前seq_len个时间步
         x = input['data'][:, 0:self.seq_len, :]
         print(f"x.shape1: {x.shape}")  # 打印原始输入形状
         x = x.float()  # 确保输入数据为float类型
+        
+        # 通过模型得到预测
         x = self.f(x)
-        print( f"x.shape2: {x.shape}")  # 打印经过f函数后的形状
+        print(f"x.shape2: {x.shape}")  # 打印经过f函数后的形状
 
-        # 目标步骤是输入序列的后50个时间步
-        # target_steps = input['data'][:, 600:, :]
-        # print(f"target_steps.shape: {target_steps.shape}")
-        # predicted_steps = x[:, 600:, :]
-        target_steps = input['data'][:, self.seq_len+self.label_len:, :]
+        # 提取目标值：从输入的第seq_len个时间步开始，取pred_len个时间步的第二个特征（传感器值）
+        if input['data'].shape[1] >= self.seq_len + self.pred_len:
+            # 只取第二个特征（索引1）作为目标，因为我们只预测传感器值
+            target_steps = input['data'][:, self.seq_len:self.seq_len+self.pred_len, 1:2]
+        else:
+            # 如果数据长度不够，从可用的数据中提取
+            available_steps = input['data'].shape[1] - self.seq_len
+            target_steps = input['data'][:, self.seq_len:, 1:2]
+            # 如果目标步数少于预测步数，截断预测
+            if available_steps < self.pred_len:
+                x = x[:, :available_steps, :]
+        
         print(f"target_steps.shape: {target_steps.shape}")
-        predicted_steps = x[:, :, :]
+        predicted_steps = x
         print(f"predicted_steps.shape: {predicted_steps.shape}")
+        
         # 计算损失
         loss = F.mse_loss(predicted_steps, target_steps, reduction='mean')
         output['loss'] = loss
         output['predicted_steps'] = predicted_steps
+        output['target'] = target_steps  # 保存目标值用于评估
 
-        output['target'] = x
-        # mask = input['mask'][:, 1:]
-        # output_target = output['target'][:, :-1][mask]
-        # input_target = input['data'][:, 1:][mask]
-        # loss = F.mse_loss(output_target, input_target, reduction='mean')
-        # output['loss'] = loss
         return output
 
 
 def lstm(cfg):
     data_shape = cfg['data_shape']
+    print(f"Debug - data_shape in lstm(): {data_shape}")
     hidden_size = cfg['lstm']['hidden_size']
     num_layers = cfg['lstm']['num_layers']
     seq_len = cfg['lstm']['seq_len']
@@ -78,6 +86,7 @@ def lstm(cfg):
     target_size = 1
     print(f"hidden_size: {hidden_size}")
     print(f"target_size: {target_size}")
+    print(f"Creating LSTM with input_size: {data_shape[-1]}")
     model = LSTM(data_shape, hidden_size, num_layers, target_size, seq_len, label_len, pred_len)
     model.apply(init_param)
     return model

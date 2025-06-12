@@ -8,6 +8,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 from config import cfg
+import pandas as pd
 
 data_stats = {'MNIST': ((0.1307,), (0.3081,)), 'FashionMNIST': ((0.2860,), (0.3530,)),
               'CIFAR10': ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
@@ -57,7 +58,7 @@ def make_dataset(data_name, subset_name, verbose=True):
             transforms.ToTensor(),
             transforms.Normalize(*data_stats[data_name])])
     elif data_name in ['SmartHome']:
-        dataset.Preprocess('data', data_name)
+        # dataset.Preprocess('data', data_name)  # 注释掉，因为我们已经有预处理好的数据
         dataset_['train'] = dataset.SmartHome(root=root, split='train', subset=subset_name)
         dataset_['test'] = dataset.SmartHome(root=root, split='test', subset=subset_name)
     else:
@@ -133,20 +134,67 @@ def process_dataset(dataset, tokenizer):
     processed_dataset = {}
     # 分别对训练集和测试集进行处理
     for split in dataset:
-        data = defaultdict(list)
-        for subset in dataset[split].subset:
-            for k in dataset[split].data[subset]:
-                data[k].extend(dataset[split].data[subset][k])
-        processed_dataset[split] = Dataset.from_dict(data)
-        processed_dataset[split] = processed_dataset[split].map(
-            preprocess_function,
-            batched=True,
-            num_proc=1,
-            load_from_cache_file=False,
-            desc='Preprocess dataset',
-            remove_columns=['t_start'],
-            batch_size=50,
-        )
+        # SmartHome数据集的特殊处理
+        if hasattr(dataset[split], 'data_name') and dataset[split].data_name == 'SmartHome':
+            # 从数据集中收集所有数据
+            all_data = []
+            all_t_start = []
+            
+            for subset in dataset[split].subset:
+                if subset in dataset[split].data:
+                    subset_data = dataset[split].data[subset]
+                    all_data.extend(subset_data['data'])
+                    all_t_start.extend(subset_data['t_start'])
+            
+            # 创建一个简化的数据结构供tokenizer使用
+            # 将简单的数值数组转换为tokenizer期望的格式
+            formatted_data = []
+            for i in range(len(all_data)):
+                # 为LS005设备创建格式化数据
+                # t_start是数组索引，需要转换为时间戳
+                start_timestamp = pd.Timestamp('2015-01-01') + pd.Timedelta(seconds=all_t_start[i] * 300)
+                data_dict = {
+                    'd_value': all_data[i].tolist() if hasattr(all_data[i], 'tolist') else all_data[i],
+                    'ts': pd.date_range(start=start_timestamp, periods=len(all_data[i]), freq='300s'),
+                    'd_name': ['LS005'] * len(all_data[i]),
+                    'd_func': ['light'] * len(all_data[i]),
+                    'd_type': ['sensor'] * len(all_data[i])
+                }
+                formatted_data.append(data_dict)
+            
+            # 创建HuggingFace Dataset格式
+            # 将t_start索引转换为时间戳
+            formatted_t_start = []
+            for t_idx in all_t_start:
+                formatted_t_start.append(pd.Timestamp('2015-01-01') + pd.Timedelta(seconds=t_idx * 300))
+            
+            dataset_dict = {'data': formatted_data, 't_start': formatted_t_start}
+            processed_dataset[split] = Dataset.from_dict(dataset_dict)
+            processed_dataset[split] = processed_dataset[split].map(
+                preprocess_function,
+                batched=True,
+                num_proc=1,
+                load_from_cache_file=False,
+                desc='Preprocess dataset',
+                remove_columns=['t_start'],
+                batch_size=50,
+            )
+        else:
+            # 原有的处理逻辑
+            data = defaultdict(list)
+            for subset in dataset[split].subset:
+                for k in dataset[split].data[subset]:
+                    data[k].extend(dataset[split].data[subset][k])
+            processed_dataset[split] = Dataset.from_dict(data)
+            processed_dataset[split] = processed_dataset[split].map(
+                preprocess_function,
+                batched=True,
+                num_proc=1,
+                load_from_cache_file=False,
+                desc='Preprocess dataset',
+                remove_columns=['t_start'],
+                batch_size=50,
+            )
 
     cfg['data_size'] = {k: len(processed_dataset[k]) for k in processed_dataset}
     if 'num_epochs' in cfg:

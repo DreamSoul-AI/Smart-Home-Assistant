@@ -9,7 +9,7 @@ if __name__ == "__main__":
     stats_path = os.path.join('output', 'stats')
     dim = 2
     data_names = ['SmartHome']
-    subset_names = ['hh105~2015']
+    subset_names = ['hh105-2015-LS005']
     cfg['seed'] = 0
     cfg['tag'] = 'make_dataset'
     cfg['path'] = os.path.join('output', 'exp')
@@ -20,6 +20,12 @@ if __name__ == "__main__":
                 cfg['control']['data_name'] = '-'.join([data_name, subset_name])
                 process_control()
                 dataset = make_dataset(cfg['data_name'], cfg['subset_name'])
+                
+                # 如果数据集为空（新创建的数据），重新加载
+                if any(len(dataset[split]) == 0 for split in dataset):
+                    print("重新加载新创建的数据集...")
+                    dataset = make_dataset(cfg['data_name'], cfg['subset_name'])
+                
                 tokenizer = resume(os.path.join(cfg['tokenizer_path']))[cfg['data_name']]
                 dataset = process_dataset(dataset, tokenizer)
                 cfg['step'] = 0

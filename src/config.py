@@ -1,8 +1,12 @@
+import os
 import yaml
 
 global cfg
 if 'cfg' not in globals():
-    with open('config.yml', 'r') as f:
+    # 获取当前文件所在目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(current_dir, 'config.yml')
+    with open(config_path, 'r') as f:
         cfg = yaml.load(f, Loader=yaml.FullLoader)
 
 delimiters = ['_', '-', '~', ';', '#']
