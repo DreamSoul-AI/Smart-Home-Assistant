@@ -1,5 +1,5 @@
 # Smart-Home-Assistant
-
+（我完成的修改）：
 修复 config.py
 
 读取 config.yml 时改为绝对路径，解决找不到文件的问题。
