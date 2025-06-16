@@ -63,7 +63,7 @@ def runExperiment():
     if 'batch_size' not in cfg:
         cfg['batch_size'] = 32
     if 'num_epochs' not in cfg:
-        cfg['num_epochs'] = 10
+        cfg['num_epochs'] = 1  # 改为1个epoch
     if 'collate_mode' not in cfg:
         cfg['collate_mode'] = 'dict'
     if 'step_period' not in cfg:
@@ -198,9 +198,18 @@ def test(data_loader, model, logger):
             input_size = input['data'].size(0)
             input = to_device(input, cfg['device'])
             output = model(input)
+            if i == 0:
+                print("_p" * 20)
+                print("DEBUG: Test Batch 0")
+                print(f"Target shape: {output['target'].shape}")
+                print(f"Prediction shape: {output['predicted_steps'].shape}")
+                print(f"Target sample (first 5 steps): \n{output['target'][0, :5, 0]}")
+                print(f"Prediction sample (first 5 steps): \n{output['predicted_steps'][0, :5, 0]}")
+                print(f"Batch Loss: {output['loss'].item():.6f}")
+                print("_p" * 20)
             evaluation = logger.evaluate('test', 'batch', input, output)
             logger.append(evaluation, 'test', input_size)
-        evaluation = logger.evaluate('test', 'full')
+        evaluation = logger.evaluate('test', 'full', None, None)
         logger.append(evaluation, 'test', input_size)
         info = {'info': ['Model: {}'.format(cfg['tag']),
                          'Test Epoch: {}({:.0f}%)'.format(cfg['step'] // cfg['eval_period'], 100.)]}

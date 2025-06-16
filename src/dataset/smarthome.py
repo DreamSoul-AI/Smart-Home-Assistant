@@ -176,34 +176,69 @@ class SmartHome(Dataset):
         return fmt_str
 
     def make_data(self, room_set, year_set, device_set):
-        print('----------------make_data: {}_{}_{}-------------------'.format(room_set, year_set, device_set))
-        file_path = os.path.join(self.preprocessed_folder, room_set, 'year', 'device', 'data_{}_{}.csv'.format(year_set, device_set))
+        print(f'----------------make_data for: {room_set}-{year_set}-{device_set}-------------------')
+        
+        # 解析 'hh105-2015' 这样的子集名称
+        parts = [room_set, year_set, device_set]
+        if len(parts) < 2:
+            print(f"Error: subset_name '{room_set}-{year_set}-{device_set}' is not in the expected format 'room-year-device'.")
+            return {}
+        
+        room_set = parts[0]
+        year_set = parts[1]
+        
+        # 从全局配置获取设备名称 ('all' 或 'LS005' 等)
+        device_spec = parts[2]
+        
+        raw_data_path = os.path.join(self.raw_folder, room_set)
+        
+        devices_to_process = []
+        if device_spec.lower() == 'all':
+            print(f"Loading ALL devices for {room_set} - {year_set}...")
+            # 假设每个设备的数据都在一个单独的文件夹里，并且文件夹名就是设备名
+            # 我们需要扫描 raw_data_path/2015/ 类似这样的目录
+            year_path = os.path.join(raw_data_path, year_set)
+            if os.path.isdir(year_path):
+                 devices_to_process = [d for d in os.listdir(year_path) if os.path.isdir(os.path.join(year_path, d))]
+            else:
+                print(f"Warning: Directory for year {year_set} not found at {year_path}")
+        else:
+            print(f"Loading specific device: {device_spec} for {room_set} - {year_set}...")
+            devices_to_process.append(device_spec)
+            
+        print(f"Devices to be processed: {devices_to_process}")
 
-        data = pd.read_csv(file_path)
-        # data = pd.read_csv(os.path.join(self.raw_folder, room_set, 'data_{}.csv'.format(year_set)), delimiter=',')
+        all_device_data = []
+        for device in devices_to_process:
+            file_path = os.path.join(raw_data_path, year_set, device, 'data.csv')
+            if os.path.exists(file_path):
+                print(f"  - Loading from: {file_path}")
+                df = pd.read_csv(file_path)
+                all_device_data.append(df)
+            else:
+                print(f"  - Warning: File not found, skipping: {file_path}")
 
-        subset_ratio = 1.0  # make it small for test
-        split_index = int(subset_ratio * len(data))
-        data = data[:split_index]
+        if not all_device_data:
+            print("Error: No data loaded. Please check paths and configurations.")
+            return {}
+            
+        # 合并所有设备的数据
+        data = pd.concat(all_device_data, ignore_index=True)
+        data = data.sort_values(by='ts').reset_index(drop=True)
 
         data = data[['ts', 'd_name', 'd_value']]
         data['ts'] = pd.to_datetime(data['ts'])
 
-        # normalization
-        # prefixes = ['LS', 'T0', 'T1']
-        # data.loc[data['d_name'].str[:2].isin(prefixes), 'd_value'] = data.loc[data['d_name'].str[:2].isin(
-        #     prefixes), 'd_value'] / 100.0
+        print(f'-----------Total data points from all devices: {len(data)}')
 
-        print(f'-----------len(data): {len(data)}')
-
-        data = self.batchify(data, room_set, year_set, device_set)
+        # Batchify 和保存的逻辑需要针对合并后的数据进行
+        # 注意：这里的 'device_set' 参数需要一个代表性的名称，比如 'all'
+        data = self.batchify(data, room_set, year_set, device_spec)
         
-        # 保存处理后的数据
-        data_path = os.path.join(self.processed_folder, room_set, year_set, device_set, self.configuration)
+        data_path = os.path.join(self.processed_folder, room_set, year_set, device_spec, self.configuration)
         save(data, os.path.join(data_path, self.split))
         
-        # print(data['data'][:10])
-        # exit()
+        return data
 
     def process_chunk(self, chunk_args):
         chunk, dataset, freq = chunk_args  # 读取元组数据
